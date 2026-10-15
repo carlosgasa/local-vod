@@ -17,7 +17,6 @@ interface LibraryRepository {
     suspend fun titles(): List<Title>
     suspend fun refresh(): List<Title>
     suspend fun title(id: String): Title?
-    suspend fun episode(id: String): Episode?
 }
 
 interface ProgressRepository {

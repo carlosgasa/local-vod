@@ -1,7 +1,6 @@
 package com.local.vod.data.repository
 
 import com.local.vod.data.remote.LibraryApi
-import com.local.vod.domain.model.Episode
 import com.local.vod.domain.model.Title
 import com.local.vod.domain.repository.LibraryRepository
 import com.local.vod.domain.repository.ServerRepository
@@ -29,7 +28,4 @@ class LibraryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun title(id: String): Title? = titles().firstOrNull { it.id == id }
-
-    override suspend fun episode(id: String): Episode? =
-        titles().firstNotNullOfOrNull { title -> title.episodes.firstOrNull { it.id == id } }
 }

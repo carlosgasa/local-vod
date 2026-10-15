@@ -59,6 +59,11 @@ Qué hace la app: carátulas por carpeta, fila de **Seguir viendo**, selector de
 episodio, **Reanudar** o **Empezar de nuevo**, y cambio de pistas de audio y subtítulos desde los
 ajustes del reproductor (incluye los `.srt` externos). El progreso se guarda en la tele (Room).
 
+Siguiente episodio: al abrir un episodio se encola el resto de la serie, así que los botones de
+**anterior/siguiente** del reproductor funcionan con el mando, y en los últimos 25 segundos sale el
+aviso **Siguiente episodio** con *Ver ahora* y *Cancelar* (cancelar vacía la cola, así que al
+terminar ese episodio no salta a ninguno). El episodio que se deja atrás queda marcado como visto.
+
 Recompilar la app: `./build-apk.sh` (deja la APK nueva en `dist/app.apk`, lista para Downloader).
 
 ## Estructura

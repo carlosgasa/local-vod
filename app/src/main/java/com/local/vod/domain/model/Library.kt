@@ -39,6 +39,12 @@ data class PlaybackProgress(
     val fraction: Float get() = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
 }
 
+/** Lo que se le pasa al reproductor: los episodios del título y por cuál empezar. */
+data class Playlist(
+    val episodes: List<Episode>,
+    val startIndex: Int,
+)
+
 /** Una fila de "Seguir viendo": el título, el episodio a medias y dónde se quedó. */
 data class ContinueItem(
     val title: Title,

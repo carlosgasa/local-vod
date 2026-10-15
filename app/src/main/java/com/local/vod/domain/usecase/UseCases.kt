@@ -2,6 +2,7 @@ package com.local.vod.domain.usecase
 
 import com.local.vod.domain.model.ContinueItem
 import com.local.vod.domain.model.Episode
+import com.local.vod.domain.model.Playlist
 import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.domain.model.Title
 import com.local.vod.domain.repository.LibraryRepository
@@ -19,8 +20,14 @@ class GetTitle @Inject constructor(private val library: LibraryRepository) {
     suspend operator fun invoke(id: String): Title? = library.title(id)
 }
 
-class GetEpisode @Inject constructor(private val library: LibraryRepository) {
-    suspend operator fun invoke(id: String): Episode? = library.episode(id)
+/** El episodio pedido y los que le siguen, para que el reproductor tenga "siguiente episodio". */
+class GetPlaylist @Inject constructor(private val library: LibraryRepository) {
+    suspend operator fun invoke(episodeId: String): Playlist? {
+        val title = library.titles().firstOrNull { t -> t.episodes.any { it.id == episodeId } } ?: return null
+        val episodes = title.episodes // ya vienen ordenados por temporada y número
+        val index = episodes.indexOfFirst { it.id == episodeId }
+        return if (index < 0) null else Playlist(episodes, index)
+    }
 }
 
 class GetContinueWatching @Inject constructor(
