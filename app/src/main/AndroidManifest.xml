@@ -11,7 +11,7 @@
         android:name=".VodApplication"
         android:allowBackup="true"
         android:banner="@drawable/banner"
-        android:icon="@drawable/banner"
+        android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.LocalVod"
         android:usesCleartextTraffic="true">
@@ -20,8 +20,7 @@
             android:name=".presentation.MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true"
-            android:launchMode="singleTop"
-            android:screenOrientation="landscape">
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

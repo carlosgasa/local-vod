@@ -1,6 +1,6 @@
 package com.local.vod.presentation.player
 
-import android.net.Uri
+import androidx.annotation.OptIn as AndroidXOptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,14 +18,17 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Text
 import com.local.vod.domain.model.Episode
 
+@AndroidXOptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
     onBack: () -> Unit,
@@ -100,7 +103,7 @@ private fun Episode.toMediaItem(): MediaItem = MediaItem.Builder()
     .setMediaId(id)
     .setSubtitleConfigurations(
         subs.map { sub ->
-            MediaItem.SubtitleConfiguration.Builder(Uri.parse(sub.url))
+            MediaItem.SubtitleConfiguration.Builder(sub.url.toUri())
                 .setMimeType(subtitleMimeType(sub.url))
                 .setLanguage(sub.lang)
                 .setLabel("${sub.lang} (archivo)")
