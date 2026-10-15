@@ -1,0 +1,11 @@
+# Contenido del usuario y artefactos de compilación
+/media/*
+!/media/.gitkeep
+/dist/*.apk
+
+.gradle/
+build/
+local.properties
+__pycache__/
+.idea/
+*.iml

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local VOD</title>
+<style>
+  :root { color-scheme: dark; --bg:#13151a; --card:#1c1f26; --line:#2b3039; --txt:#e8eaed; --dim:#9aa3af; --acc:#4da3ff; --warn:#f6c445; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px 16px 48px; background:var(--bg); color:var(--txt);
+         font:16px/1.5 system-ui, sans-serif; max-width:960px; margin-inline:auto; }
+  h1 { margin:0 0 4px; font-size:28px; }
+  h2 { font-size:18px; margin:28px 0 10px; }
+  .dim { color:var(--dim); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-top:16px; }
+  .url { font-size:26px; font-weight:600; color:var(--acc); word-break:break-all; }
+  button { font:inherit; font-weight:600; color:var(--txt); background:#2a3040; border:1px solid var(--line);
+           border-radius:10px; padding:12px 18px; cursor:pointer; margin:4px 8px 4px 0; }
+  button:hover { background:#333b4e; }
+  table { width:100%; border-collapse:collapse; }
+  td, th { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  th { color:var(--dim); font-weight:600; font-size:13px; text-transform:uppercase; letter-spacing:.04em; }
+  img.poster { width:46px; height:68px; object-fit:cover; border-radius:4px; background:#000; display:block; }
+  .no-poster { width:46px; height:68px; border:1px dashed var(--line); border-radius:4px; }
+  .warn { color:var(--warn); font-size:14px; }
+  code { background:#0f1116; padding:2px 6px; border-radius:4px; font-size:14px; }
+  pre { background:#0f1116; padding:14px; border-radius:10px; overflow:auto; font-size:13px; line-height:1.45; }
+</style>
+</head>
+<body>
+<h1>Local VOD</h1>
+<p class="dim" id="status">Cargando…</p>
+
+<div class="card">
+  <p class="dim" style="margin:0 0 6px">Dirección para poner en la app del Fire TV:</p>
+  <div class="url" id="url">—</div>
+</div>
+
+<div class="card">
+  <button onclick="load()">Volver a escanear</button>
+  <button onclick="openFolder()">Abrir carpeta de videos</button>
+  <span class="dim" id="mediaRoot"></span>
+</div>
+
+<h2>Contenido detectado</h2>
+<div id="library"></div>
+
+<h2>Instalar la app en el Fire TV</h2>
+<div class="card" id="apk"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+async function load() {
+  $('status').textContent = 'Escaneando…';
+  const r = await fetch('/api/library');
+  const { items, server } = await r.json();
+  const base = `http://${server.ip}:${server.port}`;
+  $('url').textContent = base;
+  $('mediaRoot').textContent = server.mediaRoot;
+  $('status').textContent = `${items.length} títulos · ${server.episodes} videos · puerto ${server.port}`;
+  $('library').innerHTML = items.length ? table(items) : empty();
+  $('apk').innerHTML = server.apk
+    ? `Abre la app <b>Downloader</b> en el Fire TV y escribe:<div class="url">${base}/app.apk</div>`
+    : `<span class="warn">Todavía no hay APK compilada.</span>
+       <span class="dim">Al compilarla se copia en <code>dist/app.apk</code> y aquí aparecerá el enlace.</span>`;
+}
+
+function table(items) {
+  const rows = items.map(it => {
+    const eps = it.seasons.reduce((n, s) => n + s.episodes.length, 0);
+    const poster = it.poster
+      ? `<img class="poster" src="${it.poster}" alt="">`
+      : `<div class="no-poster"></div>`;
+    const kind = it.type === 'movie' ? 'Película'
+      : `Serie · ${it.seasons.length} temporada${it.seasons.length > 1 ? 's' : ''}`;
+    const warn = it.poster ? '' : `<div class="warn">falta carátula (poster.jpg)</div>`;
+    return `<tr><td>${poster}</td><td><b>${esc(it.title)}</b>${warn}</td>
+            <td class="dim">${kind}</td><td class="dim">${eps} video${eps > 1 ? 's' : ''}</td></tr>`;
+  }).join('');
+  return `<div class="card" style="padding:4px 12px"><table>
+    <tr><th></th><th>Título</th><th>Tipo</th><th>Videos</th></tr>${rows}</table></div>`;
+}
+
+function empty() {
+  return `<div class="card">La carpeta de videos está vacía. Pulsa
+    <b>Abrir carpeta de videos</b> y arrastra ahí tus carpetas con esta forma:
+<pre>media/
+├── Dune (2021)/            → película
+│   ├── poster.jpg
+│   └── Dune.mkv
+└── Breaking Bad/           → serie
+    ├── poster.jpg
+    └── Temporada 01/
+        ├── S01E01 - Pilot.mkv
+        └── S01E01 - Pilot.es.srt</pre>
+    El nombre de la carpeta es el título. La carátula puede llamarse
+    <code>poster</code>, <code>cover</code>, <code>folder</code> o <code>caratula</code>
+    (.jpg/.png/.webp).</div>`;
+}
+
+function esc(s) { return s.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])); }
+
+async function openFolder() { await fetch('/api/open-folder', { method: 'POST' }); }
+
+load();
+</script>
+</body>
+</html>

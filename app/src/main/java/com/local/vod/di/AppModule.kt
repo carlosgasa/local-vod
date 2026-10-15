@@ -1,0 +1,82 @@
+package com.local.vod.di
+
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.preferencesDataStoreFile
+import androidx.room.Room
+import com.local.vod.data.local.ProgressDao
+import com.local.vod.data.local.VodDatabase
+import com.local.vod.data.repository.LibraryRepositoryImpl
+import com.local.vod.data.repository.ProgressRepositoryImpl
+import com.local.vod.data.repository.ServerRepositoryImpl
+import com.local.vod.domain.repository.LibraryRepository
+import com.local.vod.domain.repository.ProgressRepository
+import com.local.vod.domain.repository.ServerRepository
+import dagger.Binds
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
+import javax.inject.Qualifier
+import javax.inject.Singleton
+
+/** Scope que sobrevive a los ViewModel: para guardar el progreso al salir del reproductor. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class AppScope
+
+@Module
+@InstallIn(SingletonComponent::class)
+object AppModule {
+
+    @Provides
+    @Singleton
+    fun okHttp(): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+    @Provides
+    @Singleton
+    fun json(): Json = Json { ignoreUnknownKeys = true }
+
+    @Provides
+    @Singleton
+    fun dataStore(@ApplicationContext context: Context): DataStore<Preferences> =
+        PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("vod_settings") }
+
+    @Provides
+    @Singleton
+    fun database(@ApplicationContext context: Context): VodDatabase =
+        Room.databaseBuilder(context, VodDatabase::class.java, "vod.db").build()
+
+    @Provides
+    fun progressDao(db: VodDatabase): ProgressDao = db.progressDao()
+
+    @Provides
+    @Singleton
+    @AppScope
+    fun appScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class RepositoryModule {
+    @Binds
+    abstract fun server(impl: ServerRepositoryImpl): ServerRepository
+
+    @Binds
+    abstract fun library(impl: LibraryRepositoryImpl): LibraryRepository
+
+    @Binds
+    abstract fun progress(impl: ProgressRepositoryImpl): ProgressRepository
+}

@@ -1,0 +1,35 @@
+package com.local.vod.data.repository
+
+import com.local.vod.data.remote.LibraryApi
+import com.local.vod.domain.model.Episode
+import com.local.vod.domain.model.Title
+import com.local.vod.domain.repository.LibraryRepository
+import com.local.vod.domain.repository.ServerRepository
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/** La biblioteca es pequeña: se cachea en memoria y se recarga a mano. */
+@Singleton
+class LibraryRepositoryImpl @Inject constructor(
+    private val api: LibraryApi,
+    private val server: ServerRepository,
+) : LibraryRepository {
+
+    private val mutex = Mutex()
+    private var cache: List<Title>? = null
+
+    override suspend fun titles(): List<Title> = cache ?: refresh()
+
+    override suspend fun refresh(): List<Title> = mutex.withLock {
+        val base = server.baseUrl.first() ?: throw IllegalStateException("Servidor sin configurar")
+        api.fetch(base).also { cache = it }
+    }
+
+    override suspend fun title(id: String): Title? = titles().firstOrNull { it.id == id }
+
+    override suspend fun episode(id: String): Episode? =
+        titles().firstNotNullOfOrNull { title -> title.episodes.firstOrNull { it.id == id } }
+}
