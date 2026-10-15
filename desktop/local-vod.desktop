@@ -3,6 +3,6 @@ Type=Application
 Name=Local VOD
 Comment=Abre el panel de control del servidor de videos
 Exec=xdg-open http://localhost:8000
-Icon=/home/CGALINDO/local-vod/app/src/main/res/drawable/banner.png
+Icon=__VOD_DIR__/app/src/main/res/drawable-xhdpi/banner.png
 Terminal=false
 Categories=AudioVideo;Video;

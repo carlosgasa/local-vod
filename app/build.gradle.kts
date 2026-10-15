@@ -31,15 +31,22 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    // El JDK del sistema puede ser cualquiera: Gradle baja y usa el 17 para compilar.
+    java {
+        toolchain { languageVersion.set(JavaLanguageVersion.of(17)) }
+    }
 }
 
 kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-        freeCompilerArgs.addAll(
-            "-opt-in=androidx.tv.material3.ExperimentalTvMaterial3Api",
-        )
     }
+}
+
+// Hilt añade su propia tarea de javac, que si no se le dice usa el JDK del sistema.
+tasks.withType<JavaCompile>().configureEach {
+    javaCompiler.set(javaToolchains.compilerFor { languageVersion.set(JavaLanguageVersion.of(17)) })
 }
 
 dependencies {
@@ -49,11 +56,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.tv.material)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
+    implementation(libs.compose.material3)
     implementation(libs.compose.material.icons)
 
     implementation(libs.media3.exoplayer)

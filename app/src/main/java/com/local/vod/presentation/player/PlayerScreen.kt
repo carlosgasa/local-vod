@@ -23,7 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -36,14 +41,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import androidx.tv.material3.Button
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
-import androidx.tv.material3.Text
+import com.local.vod.presentation.TvButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import com.local.vod.domain.model.Episode
 import kotlinx.coroutines.delay
 
@@ -79,6 +85,11 @@ fun PlayerScreen(
                 current.startIndex,
                 if (viewModel.startMs > 0) viewModel.startMs else C.TIME_UNSET,
             )
+            // Que un archivo traiga subtítulos marcados como "por defecto" no significa que
+            // se quieran siempre: se ignora esa marca y quedan a un clic en el botón CC.
+            trackSelectionParameters = trackSelectionParameters.buildUpon()
+                .setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                .build()
             playWhenReady = true
             prepare()
         }
@@ -86,6 +97,7 @@ fun PlayerScreen(
 
     var tick by remember { mutableStateOf(Tick()) }
     var cancelled by remember { mutableStateOf(false) }
+    var failure by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(player) {
         while (true) {
@@ -96,10 +108,25 @@ fun PlayerScreen(
         }
     }
 
+    // Pantalla completa de verdad: en el móvil las barras tapaban los controles del reproductor.
+    val view = LocalView.current
+    DisposableEffect(Unit) {
+        val window = (view.context as? Activity)?.window
+        val bars = window?.let { WindowCompat.getInsetsController(it, view) }
+        bars?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        bars?.hide(WindowInsetsCompat.Type.systemBars())
+        onDispose { bars?.show(WindowInsetsCompat.Type.systemBars()) }
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(player) {
         val listener = object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                failure = error.friendlyMessage()
+            }
+
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
+                failure = null
                 // Salto (manual o automático): el anterior queda como visto.
                 val previous = tick
                 if (previous.mediaId != null && previous.durationMs > 0) {
@@ -145,7 +172,7 @@ fun PlayerScreen(
                     setShowSubtitleButton(true)
                     setShowNextButton(true)
                     setShowPreviousButton(true)
-                    controllerShowTimeoutMs = 4_000
+                    controllerShowTimeoutMs = 8_000
                     requestFocus()
                 }
             },
@@ -155,7 +182,18 @@ fun PlayerScreen(
         val next = current.episodes.getOrNull(index + 1)
         val remainingMs = if (tick.durationMs > 0) tick.durationMs - tick.positionMs else Long.MAX_VALUE
 
-        if (next != null && !cancelled && remainingMs in 0..NEXT_PROMPT_MS) {
+        if (failure != null) {
+            PlaybackErrorPanel(
+                message = failure!!,
+                episodeName = current.episodes.getOrNull(index)?.name.orEmpty(),
+                next = next,
+                onRetry = { failure = null; player.prepare() },
+                onNext = { failure = null; player.seekToNextMediaItem(); player.prepare() },
+                modifier = Modifier.align(Alignment.Center).padding(32.dp),
+            )
+        }
+
+        if (failure == null && next != null && !cancelled && remainingMs in 0..NEXT_PROMPT_MS) {
             NextEpisodePrompt(
                 next = next,
                 secondsLeft = (remainingMs / 1000).toInt(),
@@ -169,6 +207,48 @@ fun PlayerScreen(
             )
         }
     }
+}
+
+@Composable
+private fun PlaybackErrorPanel(
+    message: String,
+    episodeName: String,
+    next: Episode?,
+    onRetry: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+
+    Surface(modifier.width(560.dp)) {
+        Column(Modifier.padding(24.dp)) {
+            Text("No se pudo reproducir", style = MaterialTheme.typography.titleLarge, color = Color(0xFFF6C445))
+            Spacer(Modifier.height(4.dp))
+            Text(episodeName, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(12.dp))
+            Text(message, style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Con el botón ATRÁS del mando vuelves a la lista.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(20.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TvButton(onClick = onRetry, modifier = Modifier.focusRequester(focus)) { Text("Reintentar") }
+                if (next != null) TvButton(onClick = onNext) { Text("Siguiente episodio") }
+            }
+        }
+    }
+}
+
+/** Traduce el código de Media3 a algo que se entienda desde el sofá. */
+private fun PlaybackException.friendlyMessage(): String = when (errorCode) {
+    in 2000..2999 -> "No se pudo leer el archivo desde la PC. Comprueba que el servidor siga encendido."
+    in 3000..3999 -> "El archivo está dañado o tiene un formato que no se puede leer."
+    in 4000..4999 -> "Este aparato no puede decodificar el vídeo o el audio de este archivo."
+    else -> "Fallo de reproducción (código $errorCode)."
 }
 
 @Composable
@@ -189,10 +269,10 @@ private fun NextEpisodePrompt(
             Text(next.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onPlayNow, modifier = Modifier.focusRequester(focus)) {
+                TvButton(onClick = onPlayNow, modifier = Modifier.focusRequester(focus)) {
                     Text(if (secondsLeft > 0) "Ver ahora ($secondsLeft)" else "Ver ahora")
                 }
-                Button(onClick = onCancel) { Text("Cancelar") }
+                TvButton(onClick = onCancel) { Text("Cancelar") }
             }
         }
     }

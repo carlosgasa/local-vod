@@ -1,9 +1,11 @@
 package com.local.vod.presentation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.darkColorScheme
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 
 private val VodColors = darkColorScheme(
     primary = Color(0xFF4DA3FF),
@@ -16,5 +18,8 @@ private val VodColors = darkColorScheme(
 
 @Composable
 fun VodTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = VodColors, content = content)
+    MaterialTheme(colorScheme = VodColors) {
+        // tv-material3 solo fija el color de texto dentro de un Surface: fuera queda casi negro.
+        CompositionLocalProvider(LocalContentColor provides VodColors.onBackground, content = content)
+    }
 }

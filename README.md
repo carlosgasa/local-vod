@@ -11,7 +11,7 @@ El servidor ya queda instalado como servicio del usuario: arranca con la sesión
 - **Panel de control**: icono **Local VOD** en el menú de aplicaciones (abre <http://localhost:8000>).
 - Desde el panel: ver qué contenido detectó, qué carpeta le falta carátula, **Volver a escanear** y
   **Abrir carpeta de videos**.
-- Dirección para la app: la que muestra el panel (ej. `http://192.168.1.128:8000`).
+- Dirección para la app: la que muestra el panel (ej. `http://192.168.1.100:8000`).
 
 Comandos, solo si hacen falta:
 
@@ -50,7 +50,7 @@ media/
 1. En el Fire TV, instala la app **Downloader** (de la tienda de Amazon) y activa
    *Ajustes → Mi Fire TV → Opciones de desarrollador → Apps de fuentes desconocidas*.
 2. En Downloader escribe la dirección que muestra el panel + `/app.apk`
-   (ej. `http://192.168.1.128:8000/app.apk`) e instala.
+   (ej. `http://192.168.1.100:8000/app.apk`) e instala.
 3. Al abrirla, escribe esa misma dirección (sin `/app.apk`) y pulsa **Probar y guardar**.
 
 Alternativa con adb: `adb connect <ip-del-firetv>:5555 && adb install -r dist/app.apk`.

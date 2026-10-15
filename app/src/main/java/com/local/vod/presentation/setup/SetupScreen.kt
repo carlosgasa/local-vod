@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,6 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -28,9 +34,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.tv.material3.Button
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
+import com.local.vod.presentation.TvButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 
 @Composable
 fun SetupScreen(
@@ -39,6 +45,7 @@ fun SetupScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val focus = remember { FocusRequester() }
+    val saveButton = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
 
     Column(
@@ -62,9 +69,20 @@ fun SetupScreen(
             textStyle = TextStyle(color = Color.White, fontSize = 24.sp),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+            // En la tele se escribe con el teclado en pantalla: su tecla "listo" ya guarda.
+            keyboardActions = KeyboardActions(onDone = { viewModel.testAndSave(onSaved) }),
             modifier = Modifier
                 .width(420.dp)
                 .focusRequester(focus)
+                // el campo se come las flechas: sin esto el mando no sale hacia el botón
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+                        saveButton.requestFocus()
+                        true
+                    } else {
+                        false
+                    }
+                }
                 .background(MaterialTheme.colorScheme.surface)
                 .border(2.dp, MaterialTheme.colorScheme.primary)
                 .padding(16.dp),
@@ -72,9 +90,10 @@ fun SetupScreen(
 
         Spacer(Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(
+            TvButton(
                 onClick = { viewModel.testAndSave(onSaved) },
                 enabled = !state.testing,
+                modifier = Modifier.focusRequester(saveButton),
             ) {
                 Text(if (state.testing) "Probando…" else "Probar y guardar")
             }

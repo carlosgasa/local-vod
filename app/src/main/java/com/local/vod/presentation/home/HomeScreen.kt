@@ -28,10 +28,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.tv.material3.Button
-import androidx.tv.material3.Card
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
+import com.local.vod.presentation.TvButton
+import com.local.vod.presentation.TvCard
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import coil3.compose.AsyncImage
 import com.local.vod.domain.model.ContinueItem
 import com.local.vod.domain.model.Title
@@ -55,9 +55,9 @@ fun HomeScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Local VOD", style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.width(24.dp))
-            Button(onClick = { viewModel.load(refresh = true) }) { Text("Recargar") }
+            TvButton(onClick = { viewModel.load(refresh = true) }) { Text("Recargar") }
             Spacer(Modifier.width(12.dp))
-            Button(onClick = onSetupClick) { Text("Servidor") }
+            TvButton(onClick = onSetupClick) { Text("Servidor") }
         }
         Spacer(Modifier.height(16.dp))
 
@@ -135,7 +135,7 @@ fun Poster(url: String?, name: String, modifier: Modifier = Modifier) {
 @Composable
 private fun TitleCard(title: Title, onClick: () -> Unit) {
     Column {
-        Card(onClick = onClick, modifier = Modifier.width(160.dp)) {
+        TvCard(onClick = onClick, modifier = Modifier.width(160.dp)) {
             Poster(title.posterUrl, title.name, Modifier.width(160.dp).aspectRatio(2f / 3f))
         }
         Spacer(Modifier.height(4.dp))
@@ -152,7 +152,7 @@ private fun TitleCard(title: Title, onClick: () -> Unit) {
 @Composable
 private fun ContinueCard(item: ContinueItem, onClick: () -> Unit) {
     Column {
-        Card(onClick = onClick, modifier = Modifier.width(260.dp)) {
+        TvCard(onClick = onClick, modifier = Modifier.width(260.dp)) {
             Column {
                 Poster(item.title.posterUrl, item.title.name, Modifier.width(260.dp).height(146.dp))
                 Box(

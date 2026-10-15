@@ -1,9 +1,9 @@
 [Unit]
-Description=Local VOD (servidor de videos para el Fire TV)
+Description=Local VOD (servidor de videos para el Fire TV / Android TV)
 After=network-online.target
 
 [Service]
-ExecStart=/usr/bin/python3 /home/CGALINDO/local-vod/server/server.py
+ExecStart=/usr/bin/python3 __VOD_DIR__/server/server.py
 Restart=on-failure
 RestartSec=3
 

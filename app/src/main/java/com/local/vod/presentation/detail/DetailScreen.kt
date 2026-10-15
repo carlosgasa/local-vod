@@ -30,11 +30,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.tv.material3.Button
-import androidx.tv.material3.Card
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
-import androidx.tv.material3.Text
+import com.local.vod.presentation.TvButton
+import com.local.vod.presentation.TvCard
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import com.local.vod.domain.model.Episode
 import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.presentation.formatTime
@@ -53,7 +53,9 @@ fun DetailScreen(
 
     fun open(episode: Episode) {
         val saved = state.progress[episode.id]
-        if (saved != null && saved.positionMs > 10_000) asking = episode else onPlay(episode.id, 0L)
+        // Terminado (>=95 %) no se "reanuda": empieza de cero como cualquier otro.
+        val resumable = saved != null && saved.positionMs > 10_000 && saved.fraction < 0.95f
+        if (resumable) asking = episode else onPlay(episode.id, 0L)
     }
 
     Box(
@@ -111,15 +113,15 @@ private fun MovieActions(
     onPlay: (String, Long) -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (progress != null && progress.positionMs > 10_000) {
-            Button(onClick = { onPlay(movie.id, progress.positionMs) }) {
+        if (progress != null && progress.positionMs > 10_000 && progress.fraction < 0.95f) {
+            TvButton(onClick = { onPlay(movie.id, progress.positionMs) }) {
                 Text("Reanudar ${formatTime(progress.positionMs)}")
             }
-            Button(onClick = { viewModel.restart(movie.id) { onPlay(movie.id, 0L) } }) {
+            TvButton(onClick = { viewModel.restart(movie.id) { onPlay(movie.id, 0L) } }) {
                 Text("Empezar de nuevo")
             }
         } else {
-            Button(onClick = { onPlay(movie.id, 0L) }) { Text("Reproducir") }
+            TvButton(onClick = { onPlay(movie.id, 0L) }) { Text("Reproducir") }
         }
     }
 }
@@ -134,7 +136,7 @@ private fun SeasonEpisodes(
     if (seasons.size > 1) {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(seasons, key = { it.number }) { season ->
-                Button(onClick = { selected = season.number }) {
+                TvButton(onClick = { selected = season.number }) {
                     Text(if (season.number == selected) "▍Temporada ${season.number}" else "Temporada ${season.number}")
                 }
             }
@@ -151,7 +153,7 @@ private fun SeasonEpisodes(
 
 @Composable
 private fun EpisodeRow(episode: Episode, progress: PlaybackProgress?, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    TvCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -217,10 +219,10 @@ private fun ResumeDialog(
                 Text(episodeName, style = MaterialTheme.typography.titleLarge, maxLines = 2)
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = onResume, modifier = Modifier.focusRequester(focus)) {
+                    TvButton(onClick = onResume, modifier = Modifier.focusRequester(focus)) {
                         Text("Reanudar ${formatTime(positionMs)}")
                     }
-                    Button(onClick = onRestart) { Text("Empezar de nuevo") }
+                    TvButton(onClick = onRestart) { Text("Empezar de nuevo") }
                 }
             }
         }
