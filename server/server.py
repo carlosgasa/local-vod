@@ -208,6 +208,7 @@ def link_items():
             "title": link.get("title") or url,
             "type": "movie",
             "poster": link.get("poster"),
+            "preview": None,
             "remote": True,
             "addedAt": link.get("addedAt", 0),
             "seasons": [{"number": 1, "episodes": [episode]}],
@@ -284,6 +285,23 @@ def thumb_path(video, size):
     return STATE_FILE.parent / "thumbs" / name
 
 
+def preview_path(video, size):
+    key = f"{video.relative_to(MEDIA_ROOT)}:{size}"
+    name = hashlib.sha256(key.encode()).hexdigest() + ".mp4"
+    return STATE_FILE.parent / "previews" / name
+
+
+def preview_source(folder):
+    first = next((v for v in videos_in(folder) if v.suffix.lower() in VIDEO_EXT), None)
+    if first is not None:
+        return first
+    for sub in sorted((d for d in folder.iterdir() if d.is_dir()), key=natkey):
+        first = next((v for v in videos_in(sub) if v.suffix.lower() in VIDEO_EXT), None)
+        if first is not None:
+            return first
+    return None
+
+
 def episode_of(video, default_season, durations):
     season, number = parse_episode(video.name)
     remote = read_link_file(video) if video.suffix.lower() in LINK_EXT else None
@@ -324,11 +342,14 @@ def scan_title(folder, durations=None):
         eps.sort(key=lambda e: (e["number"] if e["number"] is not None else 0, natkey(e["title"])))
 
     is_movie = not season_dirs and len(episodes) == 1
+    first = preview_source(folder)
+    preview = preview_path(first, first.stat().st_size) if first else None
     return {
         "id": str(folder.relative_to(MEDIA_ROOT)),
         "title": folder.name,
         "type": "movie" if is_movie else "series",
         "poster": find_poster(folder),
+        "preview": "/preview/" + preview.name if preview and preview.is_file() and ffmpeg_available() else None,
         "addedAt": max(ep["addedAt"] for ep in episodes),
         "seasons": [{"number": n, "episodes": seasons[n]} for n in sorted(seasons)],
     }
@@ -473,6 +494,8 @@ LINKS_FILE = STATE_FILE.parent / "links.json"
 _durations_lock = threading.Lock()
 _scanning_durations = False
 _scanning_thumbs = False
+_scanning_previews = False
+_preview_lock = threading.Lock()
 
 
 def battery():
@@ -583,8 +606,42 @@ def generate_thumbs(files):
         _scanning_thumbs = False
 
 
+def generate_previews(files):
+    """Genera adelantos en serie para limitar el uso de CPU."""
+    global _scanning_previews
+    try:
+        for path in files:
+            try:
+                target = preview_path(path, path.stat().st_size)
+                if target.is_file():
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                partial = target.with_suffix(".tmp.mp4")
+                seconds = probe_duration(path)
+                start = min(seconds * 0.2, seconds - 5) if seconds > 5 else 0 if seconds > 0 else 60
+                def encode(offset):
+                    return subprocess.run(
+                        ["ffmpeg", "-nostdin", "-y", "-ss", str(offset), "-i", str(path),
+                         "-t", "5", "-an", "-vf", "scale=min(480\\,iw):-2",
+                         "-c:v", "libx264", "-movflags", "+faststart", str(partial)],
+                        capture_output=True, timeout=180,
+                    )
+                result = encode(start)
+                if seconds == 0 and (result.returncode != 0 or not partial.is_file() or not partial.stat().st_size):
+                    result = encode(0)
+                if result.returncode == 0 and partial.is_file() and partial.stat().st_size:
+                    partial.replace(target)
+                else:
+                    partial.unlink(missing_ok=True)
+            except (OSError, subprocess.SubprocessError):
+                continue
+    finally:
+        with _preview_lock:
+            _scanning_previews = False
+
+
 def start_media_scans(files):
-    global _scanning_durations, _scanning_thumbs
+    global _scanning_durations, _scanning_thumbs, _scanning_previews
     if not files or not ffmpeg_available():
         return
     cache = load_durations()
@@ -598,6 +655,14 @@ def start_media_scans(files):
     ):
         _scanning_thumbs = True
         threading.Thread(target=generate_thumbs, args=(files,), daemon=True).start()
+    with _preview_lock:
+        if not _scanning_previews:
+            folders = {p.relative_to(MEDIA_ROOT).parts[0] for p in files}
+            sources = [preview_source(MEDIA_ROOT / name) for name in folders]
+            pending = [p for p in sources if p and not preview_path(p, p.stat().st_size).is_file()]
+            if pending:
+                _scanning_previews = True
+                threading.Thread(target=generate_previews, args=(pending,), daemon=True).start()
 
 
 def library_stats():
@@ -957,6 +1022,15 @@ class Handler(BaseHTTPRequestHandler):
             if not thumb.is_file():
                 return self.send_bytes(b"not found", "text/plain", 404)
             return self.send_file(thumb)
+        if path.startswith("/preview/"):
+            name = unquote(path[len("/preview/"):])
+            root = STATE_FILE.parent / "previews"
+            preview = (root / name).resolve()
+            if root.resolve() not in preview.parents or not re.fullmatch(r"[0-9a-f]{64}\.mp4", name):
+                return self.send_bytes(b"fuera de la carpeta de adelantos", "text/plain", 403)
+            if not preview.is_file():
+                return self.send_bytes(b"not found", "text/plain", 404)
+            return self.send_file(preview)
         self.send_bytes(b"not found", "text/plain", 404)
 
     do_HEAD = do_GET

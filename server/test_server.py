@@ -100,6 +100,7 @@ def test_scan(root):
     assert s1[1]["subs"] == []
     assert s1[0]["durationSeconds"] is None
     assert serie["addedAt"] == max(e["addedAt"] for s in serie["seasons"] for e in s["episodes"])
+    assert movie["preview"].startswith("/preview/") if server.ffmpeg_available() else movie["preview"] is None
 
     cortos = items["Cortos"]
     assert cortos["type"] == "series"  # varios videos sueltos
@@ -150,13 +151,22 @@ def test_http(root):
     assert lib.headers["Content-Type"].startswith("application/json")
     payload = json.loads(lib.read())
     assert all("addedAt" in i for i in payload["items"])
+    assert next(i for i in payload["items"] if i["title"] == "Remoto")["preview"] is None
     assert all("durationSeconds" in e and "thumb" in e and "addedAt" in e
                for i in payload["items"] for s in i["seasons"] for e in s["episodes"])
     thumb = next(i for i in payload["items"] if i["id"] == "Dune (2021)")["seasons"][0]["episodes"][0]["thumb"]
     assert get(thumb).read() == b"jpg"
+    preview = next(i for i in payload["items"] if i["id"] == "Dune (2021)")["preview"]
+    if server.ffmpeg_available():
+        assert get(preview, {"Range": "bytes=1-3"}).read() == b"rev"
     try:
         get("/thumb/..%2F..%2Fstate.json")
         assert False, "miniatura fuera de la carpeta"
+    except urllib.error.HTTPError as e:
+        assert e.code == 403
+    try:
+        get("/preview/..%2F..%2Fstate.json")
+        assert False, "adelanto fuera de la carpeta"
     except urllib.error.HTTPError as e:
         assert e.code == 403
     assert get("/").read().startswith(b"<!DOCTYPE html>")
@@ -285,17 +295,27 @@ def test_state_http(tmp, root):
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
+        root = Path(tmp) / "media"
+        root.mkdir()
         build_tree(root)
         server.MEDIA_ROOT = root
-        server.STATE_FILE = root / "state.json"
-        server.DURATIONS_FILE = root / "durations.json"
+        server.STATE_FILE = Path(tmp) / "state.json"
+        server.DURATIONS_FILE = Path(tmp) / "durations.json"
+        server.LINKS_FILE = Path(tmp) / "links.json"
         server.DURATIONS_FILE.write_text(json.dumps({"Dune (2021)/Dune.mkv:2048": 123.9}))
         thumb = server.thumb_path(root / "Dune (2021)" / "Dune.mkv", 2048)
         thumb.parent.mkdir(parents=True)
         thumb.write_bytes(b"jpg")
+        preview = server.preview_path(root / "Dune (2021)" / "Dune.mkv", 2048)
+        preview.parent.mkdir(parents=True)
+        preview.write_bytes(b"preview")
+        server.save_links([{"title": "Remoto", "url": "https://example.com/video.mp4"}])
+        assert server.link_items()[0]["preview"] is None
         test_scan(root)
         test_http(root)
         test_state(tmp)
         test_state_http(tmp, root)
+        video = root / "Dune (2021)" / "Dune.mkv"
+        video.write_bytes(video.read_bytes() + b"x")
+        assert server.preview_path(video, video.stat().st_size) != preview
     print("todo OK")

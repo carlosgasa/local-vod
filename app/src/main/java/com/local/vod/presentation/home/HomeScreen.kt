@@ -1,7 +1,13 @@
 package com.local.vod.presentation.home
 
+import androidx.annotation.OptIn as AndroidXOptIn
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,16 +30,21 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -45,8 +56,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import com.local.vod.presentation.TvButton
 import com.local.vod.presentation.neonBackground
 import com.local.vod.presentation.screenPadding
@@ -60,6 +81,7 @@ import com.local.vod.domain.model.ContinueItem
 import com.local.vod.domain.model.Title
 import com.local.vod.presentation.formatTime
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
@@ -70,6 +92,21 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val previewsEnabled by viewModel.previewsEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var foreground by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
+    var activePreview by remember { mutableStateOf<Any?>(null) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) foreground = true
+            if (event == Lifecycle.Event.ON_STOP) {
+                foreground = false
+                activePreview = null
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val visibleTitles = state.visibleTitles
     val recentTitles = state.recentTitles
     val searchFieldFocus = remember { FocusRequester() }
@@ -235,7 +272,8 @@ fun HomeScreen(
                                 Spacer(Modifier.height(8.dp))
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                     items(recentTitles, key = { it.id }) { title ->
-                                        TitleCard(title) { onTitleClick(title) }
+                                        TitleCard(title, previewsEnabled, foreground, activePreview,
+                                            { activePreview = it }) { onTitleClick(title) }
                                     }
                                 }
                             }
@@ -253,6 +291,10 @@ fun HomeScreen(
                     itemsIndexed(visibleTitles, key = { _, title -> title.id }) { index, title ->
                         TitleCard(
                             title,
+                            previewsEnabled,
+                            foreground,
+                            activePreview,
+                            { activePreview = it },
                             modifier = if (index == 0) Modifier.focusRequester(firstResultFocus) else Modifier,
                         ) { onTitleClick(title) }
                     }
@@ -308,10 +350,45 @@ fun Poster(url: String?, name: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun TitleCard(title: Title, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun TitleCard(
+    title: Title,
+    previewsEnabled: Boolean,
+    foreground: Boolean,
+    activePreview: Any?,
+    setActivePreview: (Any?) -> Unit,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val source = remember { MutableInteractionSource() }
+    val focused by source.collectIsFocusedAsState()
+    val hovered by source.collectIsHoveredAsState()
+    val pressed by source.collectIsPressedAsState()
+    val owner = remember { Any() }
+    val currentActive by rememberUpdatedState(activePreview)
+    val eligible = (focused || hovered || pressed) && previewsEnabled && foreground && title.previewUrl != null
+    var ready by remember { mutableStateOf(false) }
+    DisposableEffect(eligible) {
+        if (eligible) setActivePreview(owner)
+        onDispose { if (currentActive === owner) setActivePreview(null) }
+    }
+    LaunchedEffect(eligible, title.previewUrl) {
+        ready = false
+        if (eligible) {
+            delay(5_000)
+            ready = true
+        }
+    }
     Column {
-        TvCard(onClick = onClick, modifier = modifier.width(160.dp)) {
-            Poster(title.posterUrl, title.name, Modifier.width(160.dp).aspectRatio(2f / 3f))
+        TvCard(onClick = onClick, modifier = modifier.width(160.dp), interactionSource = source) {
+            Box(Modifier.width(160.dp).aspectRatio(2f / 3f)) {
+                val showPreview = ready && eligible && activePreview === owner
+                var videoReady by remember { mutableStateOf(false) }
+                if (showPreview) {
+                    PreviewVideo(title.previewUrl, onReady = { videoReady = it })
+                }
+                val posterAlpha by animateFloatAsState(if (showPreview && videoReady) 0f else 1f, label = "Adelanto")
+                Poster(title.posterUrl, title.name, Modifier.fillMaxSize().alpha(posterAlpha))
+            }
         }
         Spacer(Modifier.height(4.dp))
         Text(
@@ -322,6 +399,47 @@ private fun TitleCard(title: Title, modifier: Modifier = Modifier, onClick: () -
             modifier = Modifier.width(160.dp),
         )
     }
+}
+
+@Composable
+@AndroidXOptIn(UnstableApi::class)
+private fun PreviewVideo(url: String, onReady: (Boolean) -> Unit) {
+    val context = LocalContext.current
+    val player = remember(url) {
+        ExoPlayer.Builder(context).build().apply {
+            volume = 0f
+            repeatMode = Player.REPEAT_MODE_ONE
+            setMediaItem(MediaItem.fromUri(url))
+            playWhenReady = true
+            prepare()
+        }
+    }
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY) onReady(true)
+            }
+        }
+        player.addListener(listener)
+        if (player.playbackState == Player.STATE_READY) onReady(true)
+        onDispose {
+            onReady(false)
+            player.removeListener(listener)
+            player.release()
+        }
+    }
+    AndroidView(
+        factory = {
+            PlayerView(it).apply {
+                useController = false
+                isFocusable = false
+                isClickable = false
+                this.player = player
+                setBackgroundColor(android.graphics.Color.BLACK)
+            }
+        },
+        modifier = Modifier.fillMaxSize(),
+    )
 }
 
 @Composable

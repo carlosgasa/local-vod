@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.Flow
 
 interface ServerRepository {
     val baseUrl: Flow<String?>
+    val previewsEnabled: Flow<Boolean>
+    suspend fun setPreviewsEnabled(enabled: Boolean)
     suspend fun save(baseUrl: String)
     /** true si en esa dirección responde el servidor de medios. */
     suspend fun probe(baseUrl: String): Boolean

@@ -124,6 +124,11 @@ fun SetupScreen(
             )
         }
 
+        Spacer(Modifier.height(24.dp))
+        TvButton(onClick = viewModel::togglePreviews) {
+            Text("Adelanto al enfocar: ${if (state.previewsEnabled) "sí" else "no"}")
+        }
+
         if (state.error != null) {
             Spacer(Modifier.height(16.dp))
             Text(state.error!!, color = Color(0xFFF6C445))
