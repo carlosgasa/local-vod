@@ -26,6 +26,8 @@ APK = ROOT / "dist" / "app.apk"
 PORT = int(os.environ.get("VOD_PORT") or 8000)
 DASHBOARD = Path(__file__).resolve().parent / "dashboard.html"
 STATE_FILE = Path(os.environ.get("VOD_STATE") or ROOT / "data" / "state.json")
+MANUAL = Path(__file__).resolve().parent / "manual.html"
+MANUAL_DIR = Path(__file__).resolve().parent / "manual"
 
 VIDEO_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".webm", ".mov", ".ts", ".mpg", ".mpeg", ".wmv", ".flv"}
 SUB_EXT = {".srt", ".ass", ".ssa", ".vtt"}
@@ -347,6 +349,55 @@ def start_conversion(source):
     return job_id
 
 
+# ---------------------------------------------------------------- paquete
+
+# "Quiero montar el servidor en la otra computadora": desde el panel se baja
+# un zip con lo imprescindible y sus instaladores. No hace falta git ni nada.
+PACKAGE_FILES = [
+    "server/server.py",
+    "server/dashboard.html",
+    "server/manual.html",
+    "server/test_server.py",
+    "desktop/install.sh",
+    "desktop/install-server.sh",
+    "desktop/instalar-windows.bat",
+    "desktop/install-windows.ps1",
+    "desktop/local-vod.service",
+    "desktop/local-vod-system.service",
+    "desktop/local-vod.desktop",
+]
+
+PACKAGE_README = """Local VOD - servidor de videos para la casa
+
+Necesitas Python 3 instalado. Despues:
+
+  Windows      doble clic en  desktop\\instalar-windows.bat
+  Linux (PC)   bash desktop/install.sh
+  Sin escritorio sudo bash desktop/install-server.sh /ruta/a/tus/videos
+
+Luego copia tus carpetas de videos dentro de la carpeta "media" y abre
+http://localhost:8000 para ver el panel. En la tele o el movil, abre la app
+Local VOD y pulsa "Buscar en mi red".
+"""
+
+
+def package_zip():
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for relative in PACKAGE_FILES:
+            path = ROOT / relative
+            if path.is_file():
+                zf.write(path, f"local-vod/{relative}")
+        for image in sorted(MANUAL_DIR.glob("*.png")):
+            zf.write(image, f"local-vod/server/manual/{image.name}")
+        zf.writestr("local-vod/LEEME.txt", PACKAGE_README)
+        zf.writestr("local-vod/media/.keep", "")
+    return buffer.getvalue()
+
+
 # ---------------------------------------------------------------- HTTP
 
 class Handler(BaseHTTPRequestHandler):
@@ -446,6 +497,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/jobs":
             with _jobs_lock:
                 return self.send_json({"jobs": list(JOBS.values()), "ffmpeg": ffmpeg_available()})
+        if path == "/manual":
+            return self.send_bytes(MANUAL.read_bytes(), "text/html; charset=utf-8")
+        if path.startswith("/manual/"):
+            image = Path(os.path.normpath(MANUAL_DIR / unquote(path[len("/manual/"):])))
+            if MANUAL_DIR not in image.parents or not image.is_file():
+                return self.send_bytes(b"not found", "text/plain", 404)
+            return self.send_file(image)
+        if path == "/local-vod.zip":
+            return self.send_bytes(package_zip(), "application/zip")
         if path == "/app.apk":
             if not APK.is_file():
                 return self.send_bytes(b"compila la app primero", "text/plain", 404)

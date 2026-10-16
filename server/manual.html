@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local VOD · Manual</title>
+<style>
+  :root { color-scheme: dark; --bg:#13151a; --card:#1c1f26; --line:#2b3039; --txt:#e8eaed;
+          --dim:#9aa3af; --acc:#4da3ff; --warn:#f6c445; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px 16px 64px; background:var(--bg); color:var(--txt);
+         font:16px/1.6 system-ui, sans-serif; max-width:860px; margin-inline:auto; }
+  h1 { font-size:30px; margin:0 0 4px; }
+  h2 { font-size:22px; margin:40px 0 12px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+  h3 { font-size:17px; margin:24px 0 8px; }
+  a { color:var(--acc); }
+  .dim { color:var(--dim); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin:16px 0; }
+  img.shot { width:100%; border-radius:10px; border:1px solid var(--line); display:block; margin:12px 0 6px; }
+  figcaption { color:var(--dim); font-size:14px; margin-bottom:20px; }
+  figure { margin:0; }
+  code { background:#0f1116; padding:2px 6px; border-radius:4px; font-size:14px; }
+  pre { background:#0f1116; padding:14px; border-radius:10px; overflow:auto; font-size:13.5px; line-height:1.5; }
+  ol li, ul li { margin:6px 0; }
+  .step { display:flex; gap:14px; align-items:flex-start; margin:14px 0; }
+  .num { flex:0 0 32px; height:32px; border-radius:50%; background:var(--acc); color:#07121f;
+         font-weight:700; display:grid; place-items:center; }
+  .warn { border-left:4px solid var(--warn); padding-left:14px; }
+  table { width:100%; border-collapse:collapse; margin:12px 0; }
+  td, th { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--dim); font-size:13px; text-transform:uppercase; letter-spacing:.04em; }
+  .toc a { display:inline-block; margin-right:16px; }
+</style>
+</head>
+<body>
+
+<h1>Local VOD · manual</h1>
+<p class="dim">Tus videos, en tu red, sin cuentas ni internet. <a href="/">← volver al panel</a></p>
+
+<p class="toc">
+  <a href="#como">Cómo funciona</a>
+  <a href="#panel">El panel</a>
+  <a href="#carpetas">Poner videos</a>
+  <a href="#app">La app</a>
+  <a href="#otra">Servidor en otra computadora</a>
+  <a href="#problemas">Si algo falla</a>
+</p>
+
+<h2 id="como">Cómo funciona</h2>
+<div class="card">
+<svg viewBox="0 0 820 300" width="100%" role="img" aria-label="Diagrama: la computadora con los videos sirve a la tele y a los móviles por el wifi de casa">
+  <defs>
+    <marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#4da3ff"/>
+    </marker>
+  </defs>
+  <rect x="20" y="95" width="210" height="115" rx="12" fill="#1c1f26" stroke="#2b3039"/>
+  <text x="125" y="128" fill="#e8eaed" font-size="16" font-weight="600" text-anchor="middle">Computadora</text>
+  <text x="125" y="152" fill="#9aa3af" font-size="13" text-anchor="middle">carpeta media/ con</text>
+  <text x="125" y="170" fill="#9aa3af" font-size="13" text-anchor="middle">tus películas y series</text>
+  <text x="125" y="192" fill="#4da3ff" font-size="13" text-anchor="middle">server.py · puerto 8000</text>
+
+  <line x1="230" y1="152" x2="340" y2="152" stroke="#4da3ff" stroke-width="2" marker-end="url(#a)"/>
+  <circle cx="400" cy="152" r="58" fill="#1c1f26" stroke="#2b3039"/>
+  <text x="400" y="148" fill="#e8eaed" font-size="15" font-weight="600" text-anchor="middle">wifi</text>
+  <text x="400" y="168" fill="#9aa3af" font-size="12" text-anchor="middle">de tu casa</text>
+
+  <line x1="458" y1="120" x2="560" y2="70" stroke="#4da3ff" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="458" y1="152" x2="560" y2="152" stroke="#4da3ff" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="458" y1="184" x2="560" y2="234" stroke="#4da3ff" stroke-width="2" marker-end="url(#a)"/>
+
+  <rect x="570" y="35" width="230" height="70" rx="10" fill="#1c1f26" stroke="#2b3039"/>
+  <text x="685" y="63" fill="#e8eaed" font-size="15" text-anchor="middle">Fire TV</text>
+  <text x="685" y="84" fill="#9aa3af" font-size="12" text-anchor="middle">app Local VOD</text>
+
+  <rect x="570" y="117" width="230" height="70" rx="10" fill="#1c1f26" stroke="#2b3039"/>
+  <text x="685" y="145" fill="#e8eaed" font-size="15" text-anchor="middle">Android TV</text>
+  <text x="685" y="166" fill="#9aa3af" font-size="12" text-anchor="middle">la misma app</text>
+
+  <rect x="570" y="199" width="230" height="70" rx="10" fill="#1c1f26" stroke="#2b3039"/>
+  <text x="685" y="227" fill="#e8eaed" font-size="15" text-anchor="middle">Celular</text>
+  <text x="685" y="248" fill="#9aa3af" font-size="12" text-anchor="middle">la misma app, con el dedo</text>
+</svg>
+<p class="dim" style="margin:8px 0 0">
+  La computadora que tiene los videos ejecuta el servidor y lo publica en tu red. Los aparatos
+  no guardan nada: piden el video al servidor mientras lo ves. <b>El avance de cada perfil se
+  guarda en el servidor</b>, por eso puedes empezar un capítulo en el celular y seguirlo en la tele.
+</p>
+</div>
+
+<h2 id="panel">El panel (en la computadora del servidor)</h2>
+<p>Se abre con el icono <b>Local VOD</b> del menú de aplicaciones, o en
+<code>http://localhost:8000</code>. Desde ahí se hace todo sin tocar la terminal.</p>
+<figure>
+  <img class="shot" src="/manual/panel.png" alt="Panel de Local VOD con la dirección, los perfiles y el contenido detectado">
+  <figcaption>Arriba, la dirección que usan la tele y los celulares. Luego los perfiles, y el
+  contenido detectado con el botón de convertir en cada video.</figcaption>
+</figure>
+<table>
+  <tr><th>Botón</th><th>Para qué</th></tr>
+  <tr><td>Volver a escanear</td><td>Lo pulsas después de copiar videos nuevos.</td></tr>
+  <tr><td>Abrir carpeta de videos</td><td>Abre la carpeta <code>media</code> para arrastrar ahí tus series.</td></tr>
+  <tr><td>Añadir perfil</td><td>Crea un perfil (Renombrar / Borrar al lado de cada uno).</td></tr>
+  <tr><td>Convertir a MP4</td><td>Para un video que algún aparato no reproduzca. Deja el original y crea una copia compatible al lado.</td></tr>
+</table>
+
+<h2 id="carpetas">Poner videos: una carpeta = una película o una serie</h2>
+<pre>media/
+├── Dune (2021)/                 → película (un solo video dentro)
+│   ├── poster.jpg
+│   └── Dune.mkv
+└── Breaking Bad/                → serie (tiene carpetas de temporada)
+    ├── poster.jpg
+    └── Temporada 01/
+        ├── S01E01 - Pilot.mkv
+        └── S01E01 - Pilot.es.srt   → subtítulo externo en español</pre>
+<ul>
+  <li>El <b>nombre de la carpeta</b> es el título que se ve en la tele.</li>
+  <li>La <b>carátula</b> puede llamarse <code>poster</code>, <code>cover</code>, <code>folder</code>
+      o <code>caratula</code>, en <code>.jpg</code>, <code>.png</code> o <code>.webp</code>.</li>
+  <li>Las <b>temporadas</b> son subcarpetas <code>Temporada 1</code>, <code>Season 2</code>, <code>S03</code>…</li>
+  <li>Los <b>episodios</b> se ordenan por el <code>S01E02</code> del nombre.</li>
+  <li>Si los videos están en otro disco, mete un <b>acceso directo (symlink)</b> dentro de <code>media</code>.</li>
+</ul>
+
+<h2 id="app">La app en la tele o el celular</h2>
+
+<div class="step"><div class="num">1</div><div>
+  <b>Instalarla.</b> En el Fire TV o Android TV: instala <b>Downloader</b> desde la tienda, activa
+  <i>Ajustes → Mi Fire TV → Opciones de desarrollador → Apps de fuentes desconocidas</i> y escribe
+  la dirección del panel terminada en <code>/app.apk</code>. En un celular basta con abrir esa
+  misma dirección en el navegador.
+</div></div>
+
+<div class="step"><div class="num">2</div><div>
+  <b>Conectar con el servidor.</b> Pulsa <b>Buscar en mi red</b> y la app lo encuentra sola.
+  Solo si no aparece, escribe a mano la dirección que muestra el panel.
+  <figure><img class="shot" src="/manual/servidor.png" alt="Pantalla de servidor con el botón Buscar en mi red"></figure>
+</div></div>
+
+<div class="step"><div class="num">3</div><div>
+  <b>Elegir quién ve.</b> Cada perfil tiene su propio avance. Se crean aquí o desde el panel.
+  <figure><img class="shot" src="/manual/perfiles.png" alt="Pantalla ¿Quién está viendo? con el perfil Casa"></figure>
+</div></div>
+
+<div class="step"><div class="num">4</div><div>
+  <b>Ver.</b> Arriba aparece <b>Seguir viendo</b> con lo que dejaste a medias (en cualquier aparato)
+  y debajo toda la biblioteca.
+  <figure><img class="shot" src="/manual/home.png" alt="Pantalla principal con la fila Seguir viendo y la biblioteca"></figure>
+</div></div>
+
+<div class="step"><div class="num">5</div><div>
+  <b>En una serie</b>, el botón de arriba te lleva directo al episodio que toca, y cada episodio
+  muestra por dónde ibas.
+  <figure><img class="shot" src="/manual/serie.png" alt="Ficha de serie con el botón Ver T1E2 y el progreso de cada episodio"></figure>
+</div></div>
+
+<div class="step"><div class="num">6</div><div>
+  <b>Audio y subtítulos.</b> Durante la reproducción, el botón <b>CC</b> elige subtítulos (los del
+  archivo y los <code>.srt</code> que estén al lado) y el <b>engranaje</b> cambia la pista de audio.
+  No se activan solos: los pones cuando quieras.
+  <figure><img class="shot" src="/manual/subtitulos.png" alt="Menú de subtítulos con las opciones Ninguna, Español, Inglés y Francés"></figure>
+</div></div>
+
+<div class="card">
+  <b>Siguiente episodio.</b> Cuando falta poco para terminar aparece un aviso con cuenta atrás:
+  <b>Ver ahora</b> salta ya, <b>Cancelar</b> deja que el episodio termine sin saltar. Los botones
+  ⏮ ⏭ del reproductor también saltan de episodio.
+</div>
+
+<h2 id="otra">Montar el servidor en otra computadora</h2>
+<p>Sirve cualquier máquina con <b>Python 3</b> que esté encendida cuando quieras ver algo. No hace
+falta git ni conocimientos: desde el panel actual descarga el paquete y ejecuta el instalador que
+toque.</p>
+
+<div class="card">
+  <a href="/local-vod.zip"><b>⤓ Descargar el paquete del servidor (zip)</b></a>
+  <div class="dim">Contiene el servidor, el panel, este manual y los instaladores.</div>
+</div>
+
+<h3>Windows</h3>
+<ol>
+  <li>Instala Python desde <a href="https://www.python.org/downloads/windows/">python.org</a>
+      marcando <b>«Add python.exe to PATH»</b>.</li>
+  <li>Descomprime el zip donde quieras (por ejemplo <code>C:\Local VOD</code>).</li>
+  <li>Doble clic en <code>desktop\instalar-windows.bat</code>. Si Windows pregunta por el
+      cortafuegos, acepta: sin eso la tele no lo ve.</li>
+  <li>Copia tus carpetas de videos dentro de <code>media</code> y listo: el panel se abre solo y
+      el servidor arranca cada vez que enciendes la sesión.</li>
+</ol>
+
+<h3>Otra PC con Linux y escritorio</h3>
+<pre>bash desktop/install.sh</pre>
+<p class="dim">Deja el servidor arrancando con la sesión y pone el icono «Local VOD» en el menú,
+igual que en esta computadora.</p>
+
+<h3>Una máquina que vive encendida y sin pantalla</h3>
+<p>Un mini PC de segunda mano, un thin client, una PC vieja o una Raspberry Pi:</p>
+<pre>sudo bash desktop/install-server.sh /ruta/donde/esten/los/videos</pre>
+<p class="dim">Lo deja como servicio del sistema: arranca al encender, sin que nadie inicie sesión.
+Si los videos están en un disco USB, móntalo siempre en la misma ruta y pásasela ahí.</p>
+
+<div class="card warn">
+  <b>Dos cosas que suelen olvidarse al mudar el servidor:</b>
+  <ul style="margin:8px 0 0">
+    <li>Abrir el <b>puerto 8000</b> en el cortafuegos de esa computadora.</li>
+    <li>Reservarle una <b>IP fija</b> a esa máquina en el router. Si no, cuando cambie su IP
+        tendrás que pulsar «Buscar en mi red» otra vez en cada aparato (funciona, pero es un paso de más).</li>
+  </ul>
+</div>
+
+<h2 id="problemas">Si algo falla</h2>
+<table>
+  <tr><th>Qué pasa</th><th>Qué hacer</th></tr>
+  <tr><td>La app dice que no conecta</td>
+      <td>Comprueba que la computadora esté encendida y en el mismo wifi, y pulsa
+          <b>Buscar en mi red</b> en la pantalla de servidor.</td></tr>
+  <tr><td>Un video se ve negro o no se oye</td>
+      <td>Ese aparato no sabe con ese códec. En el panel, <b>Convertir a MP4</b> ese archivo y
+          vuelve a probar con la copia.</td></tr>
+  <tr><td>Un título no aparece</td>
+      <td>¿Está dentro de <code>media</code> y en su propia carpeta? Pulsa <b>Volver a escanear</b>.</td></tr>
+  <tr><td>Sale sin carátula</td>
+      <td>Mete en su carpeta un <code>poster.jpg</code>. El panel marca en amarillo las que faltan.</td></tr>
+  <tr><td>Quiero empezar una serie desde cero</td>
+      <td>En el episodio, <b>Empezar de nuevo</b>. Para borrar todo lo visto de alguien, borra su
+          perfil desde el panel.</td></tr>
+  <tr><td>Ver desde fuera de casa</td>
+      <td>No abras el puerto en el router. Instala Tailscale o WireGuard en la computadora y en el
+          celular: así es como si siguieras en casa.</td></tr>
+</table>
+
+<p class="dim" style="margin-top:40px"><a href="/">← volver al panel</a></p>
+</body>
+</html>

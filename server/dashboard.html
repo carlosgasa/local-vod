@@ -49,6 +49,7 @@
 <div class="card">
   <button onclick="load()">Volver a escanear</button>
   <button onclick="openFolder()">Abrir carpeta de videos</button>
+  <button onclick="location.href='/manual'">Manual</button>
   <span class="dim" id="mediaRoot"></span>
 </div>
 
@@ -72,6 +73,15 @@
 
 <h2>Instalar la app en el Fire TV</h2>
 <div class="card" id="apk"></div>
+
+<h2>Mover el servidor a otra computadora</h2>
+<div class="card">
+  <a href="/local-vod.zip" style="color:var(--acc);font-weight:600">⤓ Descargar el paquete del servidor (zip)</a>
+  <div class="dim" style="margin-top:6px">
+    Lleva el servidor, el panel, el manual y los instaladores para Windows, Linux y máquinas sin
+    pantalla. Los pasos están en el <a href="/manual#otra">manual</a>.
+  </div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);

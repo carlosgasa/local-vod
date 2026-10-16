@@ -1,0 +1,16 @@
+[Unit]
+Description=Local VOD (servidor de videos para la casa)
+# Espera a que el disco de los videos esté montado antes de arrancar
+After=network-online.target local-fs.target
+Wants=network-online.target
+
+[Service]
+User=__VOD_USER__
+Environment=VOD_MEDIA=__VOD_MEDIA__
+Environment=VOD_PORT=8000
+ExecStart=/usr/bin/python3 __VOD_DIR__/server/server.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

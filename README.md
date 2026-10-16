@@ -15,6 +15,11 @@ Compose, Media3 y clean architecture.
 - **Convertir a MP4** desde el panel para archivos que el aparato no decodifica.
 - La app **encuentra el servidor sola** en la red si le cambia la IP a la PC.
 
+## Manual
+
+Con el servidor encendido: **<http://localhost:8000/manual>** (o el botón *Manual* del panel).
+Lleva diagrama, capturas y los pasos para montar el servidor en otra computadora.
+
 ## En la PC
 
 El servidor ya queda instalado como servicio del usuario: arranca con la sesión y se reinicia solo.
@@ -24,6 +29,20 @@ El servidor ya queda instalado como servicio del usuario: arranca con la sesión
   **Abrir carpeta de videos**, gestionar **perfiles** y **convertir a MP4** los vídeos que algún
   aparato no aguante (usa el ffmpeg del sistema; deja el original y crea una copia al lado).
 - Dirección para la app: la que muestra el panel (ej. `http://192.168.1.100:8000`).
+
+### Montarlo en otra computadora
+
+Desde el panel, **Descargar el paquete del servidor (zip)**: trae el servidor, el panel, el manual
+y los instaladores. Después, en esa máquina:
+
+| Dónde | Qué ejecutar |
+|---|---|
+| Windows | doble clic en `desktop\instalar-windows.bat` (necesita Python con *Add to PATH*) |
+| Linux con escritorio | `bash desktop/install.sh` |
+| Sin pantalla (mini PC, thin client, Raspberry Pi, PC vieja) | `sudo bash desktop/install-server.sh /ruta/a/los/videos` |
+
+En todos los casos hay que dejar pasar el **puerto 8000** en el cortafuegos de esa computadora, y
+conviene reservarle **IP fija** en el router.
 
 Comandos, solo si hacen falta:
 
