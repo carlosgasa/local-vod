@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.Normalizer
+import java.util.Locale
 import javax.inject.Inject
 
 data class HomeUiState(
@@ -29,7 +31,29 @@ data class HomeUiState(
     val error: String? = null,
     val titles: List<Title> = emptyList(),
     val continueItems: List<ContinueItem> = emptyList(),
-)
+    val searchOpen: Boolean = false,
+    val searchQuery: String = "",
+) {
+    val isSearching: Boolean get() = searchOpen && searchQuery.isNotBlank()
+
+    val visibleTitles: List<Title> get() {
+        if (!isSearching) return titles
+        val query = searchQuery.trim().normalizeForSearch()
+        return titles.filter { query in it.name.normalizeForSearch() }
+    }
+
+    val recentTitles: List<Title> get() =
+        if (titles.size > 6 && titles.any { it.addedAt > 0L }) {
+            titles.sortedByDescending { it.addedAt }.take(10)
+        } else {
+            emptyList()
+        }
+}
+
+private fun String.normalizeForSearch(): String =
+    Normalizer.normalize(this, Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}+"), "")
+        .lowercase(Locale.ROOT)
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -90,5 +114,13 @@ class HomeViewModel @Inject constructor(
                     _state.update { it.copy(loading = false, error = e.message ?: "No se pudo conectar") }
                 }
         }
+    }
+
+    fun toggleSearch() {
+        _state.update { it.copy(searchOpen = !it.searchOpen, searchQuery = "") }
+    }
+
+    fun onSearchQueryChange(query: String) {
+        _state.update { it.copy(searchQuery = query) }
     }
 }
