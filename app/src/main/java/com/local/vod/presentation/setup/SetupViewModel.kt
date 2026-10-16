@@ -19,6 +19,7 @@ data class SetupUiState(
     val searching: Boolean = false,
     val error: String? = null,
     val status: ServerStatus? = null,
+    val previewsEnabled: Boolean = true,
 )
 
 @HiltViewModel
@@ -32,11 +33,20 @@ class SetupViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            server.previewsEnabled.collect { enabled ->
+                _state.update { it.copy(previewsEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
             server.baseUrl.first()?.let { saved ->
                 _state.update { it.copy(address = saved.removePrefix("http://")) }
                 loadStatus()
             }
         }
+    }
+
+    fun togglePreviews() {
+        viewModelScope.launch { server.setPreviewsEnabled(!_state.value.previewsEnabled) }
     }
 
     fun loadStatus() {

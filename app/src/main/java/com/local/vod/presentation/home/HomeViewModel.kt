@@ -65,6 +65,8 @@ class HomeViewModel @Inject constructor(
     profiles: ProfileRepository,
 ) : ViewModel() {
 
+    val previewsEnabled = server.previewsEnabled
+
     private val _state = MutableStateFlow(HomeUiState())
     val state = _state.asStateFlow()
 

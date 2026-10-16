@@ -63,11 +63,13 @@ fun TvButton(
 fun TvCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    interactionSource: MutableInteractionSource? = null,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
     androidx.compose.material3.Card(
         onClick = onClick,
         modifier = modifier.focusHighlight(12),
+        interactionSource = interactionSource,
         content = content,
     )
 }

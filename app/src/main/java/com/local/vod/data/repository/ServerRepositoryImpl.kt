@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import com.local.vod.data.remote.VodApi
 import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.repository.ServerRepository
@@ -29,6 +30,11 @@ class ServerRepositoryImpl @Inject constructor(
 ) : ServerRepository {
 
     override val baseUrl: Flow<String?> = dataStore.data.map { it[KEY] }
+    override val previewsEnabled: Flow<Boolean> = dataStore.data.map { it[PREVIEWS_KEY] ?: true }
+
+    override suspend fun setPreviewsEnabled(enabled: Boolean) {
+        dataStore.edit { it[PREVIEWS_KEY] = enabled }
+    }
 
     override suspend fun save(baseUrl: String) {
         dataStore.edit { it[KEY] = baseUrl }
@@ -91,6 +97,7 @@ class ServerRepositoryImpl @Inject constructor(
 
     private companion object {
         val KEY = stringPreferencesKey("base_url")
+        val PREVIEWS_KEY = booleanPreferencesKey("previews_enabled")
         const val DEFAULT_PORT = 8000
         const val PROBE_TIMEOUT_MS = 350
     }
