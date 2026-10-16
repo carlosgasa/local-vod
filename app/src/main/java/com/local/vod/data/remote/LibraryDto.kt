@@ -38,12 +38,16 @@ data class EpisodeDto(
 @Serializable
 data class SubtitleDto(val lang: String, val url: String)
 
+/** Las rutas del servidor son relativas; un enlace remoto ya viene completo. */
+private fun absolute(url: String, baseUrl: String) =
+    if (url.startsWith("http://") || url.startsWith("https://")) url else baseUrl + url
+
 // El servidor manda rutas relativas ("/media/..."): aquí se vuelven absolutas.
 fun TitleDto.toDomain(baseUrl: String) = Title(
     id = id,
     name = title,
     isMovie = type == "movie",
-    posterUrl = poster?.let { baseUrl + it },
+    posterUrl = poster?.let { absolute(it, baseUrl) },
     seasons = seasons.map { season ->
         Season(
             number = season.number,
@@ -59,9 +63,9 @@ fun EpisodeDto.toDomain(titleId: String, baseUrl: String) = Episode(
     name = title,
     season = season,
     number = number,
-    url = baseUrl + url,
-    subs = subs.map { Subtitle(it.lang, baseUrl + it.url) },
+    url = absolute(url, baseUrl),
+    subs = subs.map { Subtitle(it.lang, absolute(it.url, baseUrl)) },
     durationSeconds = durationSeconds,
-    thumbUrl = thumb?.let { baseUrl + it },
+    thumbUrl = thumb?.let { absolute(it, baseUrl) },
     addedAt = addedAt,
 )

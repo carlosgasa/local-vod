@@ -3,6 +3,7 @@ package com.local.vod.presentation.player
 import androidx.annotation.OptIn as AndroidXOptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import android.view.View
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -99,6 +100,8 @@ fun PlayerScreen(
     var tick by remember { mutableStateOf(Tick()) }
     var cancelled by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<String?>(null) }
+    // Los datos de lo que se ve salen y se esconden con los controles, para no tapar la imagen.
+    var controlsVisible by remember { mutableStateOf(true) }
 
     LaunchedEffect(player) {
         while (true) {
@@ -174,12 +177,43 @@ fun PlayerScreen(
                     setShowNextButton(true)
                     setShowPreviousButton(true)
                     controllerShowTimeoutMs = 8_000
+                    setControllerVisibilityListener(
+                        PlayerView.ControllerVisibilityListener { visibility ->
+                            controlsVisible = visibility == View.VISIBLE
+                        },
+                    )
                     requestFocus()
                 }
             },
         )
 
         val index = current.episodes.indexOfFirst { it.id == tick.mediaId }
+        val playing = current.episodes.getOrNull(index)
+        if (controlsVisible && playing != null) {
+            Column(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .padding(horizontal = 40.dp, vertical = 28.dp),
+            ) {
+                Text(
+                    current.titleName.ifEmpty { playing.name },
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (!current.isMovie) {
+                    Text(
+                        "T${playing.season}E${playing.number ?: 1} · ${playing.name}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White.copy(alpha = 0.75f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+
         val next = current.episodes.getOrNull(index + 1)
         val remainingMs = if (tick.durationMs > 0) tick.durationMs - tick.positionMs else Long.MAX_VALUE
 

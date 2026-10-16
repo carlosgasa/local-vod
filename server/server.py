@@ -31,6 +31,9 @@ MANUAL_DIR = Path(__file__).resolve().parent / "manual"
 
 VIDEO_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".webm", ".mov", ".ts", ".mpg", ".mpeg", ".wmv", ".flv"}
 SUB_EXT = {".srt", ".ass", ".ssa", ".vtt"}
+# Un archivo de texto con una dirección dentro vale como vídeo: así se pueden
+# meter enlaces desde el explorador de archivos, sin tocar el panel.
+LINK_EXT = {".url", ".link"}
 POSTER_STEMS = ("poster", "cover", "folder", "caratula", "carátula")
 POSTER_EXT = (".jpg", ".jpeg", ".png", ".webp")
 CHUNK = 64 * 1024
@@ -138,6 +141,75 @@ def save_progress(profile_id, episode_id, title_id, position_ms, duration_ms):
     return with_state(mutate)
 
 
+# ---------------------------------------------------------------- enlaces
+
+# Vídeos que no están en el disco sino en una URL directa (mp4, m3u8...).
+# Se guardan aparte y se mezclan en la biblioteca como un título más; el
+# aparato los descarga directamente, no pasan por este servidor.
+def load_links():
+    try:
+        return json.loads(LINKS_FILE.read_text())
+    except (OSError, ValueError):
+        return []
+
+
+def save_links(links):
+    LINKS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = LINKS_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(links, indent=1, ensure_ascii=False))
+    tmp.replace(LINKS_FILE)
+
+
+def add_link(title, url, poster):
+    url = (url or "").strip()
+    if not url.startswith(("http://", "https://")):
+        return None
+    with _state_lock:
+        links = [l for l in load_links() if l.get("url") != url]
+        link = {
+            "title": (title or "").strip() or url.rsplit("/", 1)[-1],
+            "url": url,
+            "poster": (poster or "").strip() or None,
+            "addedAt": int(time.time() * 1000),
+        }
+        links.append(link)
+        save_links(links)
+    return link
+
+
+def delete_link(url):
+    with _state_lock:
+        save_links([l for l in load_links() if l.get("url") != url])
+    return True
+
+
+def link_items():
+    items = []
+    for link in load_links():
+        url = link.get("url", "")
+        if not url.startswith(("http://", "https://")):
+            continue
+        episode = {
+            "id": url,
+            "title": link.get("title") or url,
+            "season": 1,
+            "number": None,
+            "url": url,
+            "subs": [],
+            "addedAt": link.get("addedAt", 0),
+        }
+        items.append({
+            "id": url,
+            "title": link.get("title") or url,
+            "type": "movie",
+            "poster": link.get("poster"),
+            "remote": True,
+            "addedAt": link.get("addedAt", 0),
+            "seasons": [{"number": 1, "episodes": [episode]}],
+        })
+    return items
+
+
 # ---------------------------------------------------------------- escaneo
 
 def natkey(name):
@@ -169,8 +241,28 @@ def find_subs(video):
     return subs
 
 
+def read_link_file(path):
+    """Acepta una línea con la dirección, o el formato .url de Windows (URL=...)."""
+    try:
+        for line in path.read_text(errors="ignore").splitlines():
+            line = line.strip()
+            if line.lower().startswith("url="):
+                line = line[4:].strip()
+            if line.startswith(("http://", "https://")):
+                return line
+    except OSError:
+        pass
+    return None
+
+
 def videos_in(folder):
-    return sorted((f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in VIDEO_EXT), key=natkey)
+    playable = VIDEO_EXT | LINK_EXT
+    files = (f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in playable)
+    # un .url sin dirección dentro no es nada
+    return sorted(
+        (f for f in files if f.suffix.lower() not in LINK_EXT or read_link_file(f)),
+        key=natkey,
+    )
 
 
 def parse_episode(name):
@@ -183,12 +275,14 @@ def parse_episode(name):
 
 def episode_of(video, default_season):
     season, number = parse_episode(video.name)
+    remote = read_link_file(video) if video.suffix.lower() in LINK_EXT else None
     return {
         "id": str(video.relative_to(MEDIA_ROOT)),
         "title": video.stem,
         "season": season if season is not None else default_season,
         "number": number,  # None -> la app usa el orden de la lista
-        "url": media_url(video),
+        "url": remote or media_url(video),
+        "remote": bool(remote),
         "subs": find_subs(video),
     }
 
@@ -245,7 +339,7 @@ def lan_ip():
 
 
 def library():
-    items = scan()
+    items = scan() + link_items()
     return {
         "items": items,
         "server": {
@@ -352,6 +446,7 @@ def start_conversion(source):
 # ---------------------------------------------------------------- estado del servidor
 
 DURATIONS_FILE = STATE_FILE.parent / "durations.json"
+LINKS_FILE = STATE_FILE.parent / "links.json"
 _durations_lock = threading.Lock()
 _scanning_durations = False
 
@@ -671,6 +766,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(library())
         if path == "/api/profiles":
             return self.send_json({"profiles": profiles()})
+        if path == "/api/links":
+            return self.send_json({"links": load_links()})
         if path == "/api/progress":
             query = parse_qs(urlparse(self.path).query)
             profile_id = (query.get("profile") or [""])[0]
@@ -738,6 +835,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(profile or {"error": "no existe"}, 200 if profile else 404)
         if path == "/api/profiles/delete":
             delete_profile(body.get("id"))
+            return self.send_json({"ok": True})
+
+        if path == "/api/links":
+            link = add_link(body.get("title"), body.get("url"), body.get("poster"))
+            return self.send_json(link or {"error": "la dirección debe empezar por http:// o https://"},
+                                  200 if link else 400)
+        if path == "/api/links/delete":
+            delete_link(body.get("url"))
             return self.send_json({"ok": True})
 
         if path == "/api/progress":

@@ -30,7 +30,7 @@ class GetPlaylist @Inject constructor(private val library: LibraryRepository) {
         val title = library.titles().firstOrNull { t -> t.episodes.any { it.id == episodeId } } ?: return null
         val episodes = title.episodes // ya vienen ordenados por temporada y número
         val index = episodes.indexOfFirst { it.id == episodeId }
-        return if (index < 0) null else Playlist(episodes, index)
+        return if (index < 0) null else Playlist(episodes, index, title.name, title.isMovie)
     }
 }
 

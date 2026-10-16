@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -242,7 +243,7 @@ private fun ResumeDialog(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     Dialog(onDismissRequest = onDismiss) {
-        Surface(Modifier.width(520.dp)) {
+        Surface(Modifier.widthIn(max = 640.dp)) {
             Column(Modifier.padding(24.dp)) {
                 Text(episodeName, style = MaterialTheme.typography.titleLarge, maxLines = 2)
                 Spacer(Modifier.height(16.dp))
@@ -253,7 +254,7 @@ private fun ResumeDialog(
                         text = "Reanudar ${formatTime(positionMs)}",
                         modifier = Modifier.focusRequester(focus),
                     )
-                    TvButton(onClick = onRestart, icon = R.drawable.ic_replay, text = "Empezar de nuevo")
+                    TvButton(onClick = onRestart, icon = R.drawable.ic_replay, text = "Desde el inicio")
                 }
             }
         }

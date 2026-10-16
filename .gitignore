@@ -10,3 +10,6 @@ __pycache__/
 .idea/
 *.iml
 /data/
+
+# worktrees de trabajo en paralelo
+/.wt/

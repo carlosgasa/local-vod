@@ -51,6 +51,9 @@ data class PlaybackProgress(
 data class Playlist(
     val episodes: List<Episode>,
     val startIndex: Int,
+    /** Para enseñar en el reproductor qué se está viendo. */
+    val titleName: String = "",
+    val isMovie: Boolean = false,
 )
 
 /** Una fila de "Seguir viendo": el título, el episodio a medias y dónde se quedó. */
