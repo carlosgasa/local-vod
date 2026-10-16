@@ -1,6 +1,7 @@
 package com.local.vod.presentation.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,23 +14,37 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.vod.presentation.TvButton
@@ -44,6 +59,7 @@ import com.local.vod.R
 import com.local.vod.domain.model.ContinueItem
 import com.local.vod.domain.model.Title
 import com.local.vod.presentation.formatTime
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
@@ -54,6 +70,12 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val visibleTitles = state.visibleTitles
+    val recentTitles = state.recentTitles
+    val searchFieldFocus = remember { FocusRequester() }
+    val firstResultFocus = remember { FocusRequester() }
+    val gridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
 
     // Sin perfil elegido no hay nada que enseñar: se va directo a "¿quién está viendo?"
     LaunchedEffect(state.needsProfile, state.needsSetup) {
@@ -76,6 +98,12 @@ fun HomeScreen(
                 modifier = Modifier.weight(1f),
             )
             TvIconButton(
+                onClick = viewModel::toggleSearch,
+                icon = R.drawable.ic_search,
+                description = if (state.searchOpen) "Cerrar búsqueda" else "Buscar títulos",
+            )
+            Spacer(Modifier.width(8.dp))
+            TvIconButton(
                 onClick = { viewModel.load(refresh = true) },
                 icon = R.drawable.ic_refresh,
                 description = "Volver a cargar la biblioteca",
@@ -91,6 +119,50 @@ fun HomeScreen(
                 onClick = onProfileClick,
                 icon = R.drawable.ic_person,
                 description = state.profileName?.let { "Perfil: $it" } ?: "Elegir perfil",
+            )
+        }
+        if (state.searchOpen) {
+            Spacer(Modifier.height(12.dp))
+            LaunchedEffect(Unit) { searchFieldFocus.requestFocus() }
+            BasicTextField(
+                value = state.searchQuery,
+                onValueChange = viewModel::onSearchQueryChange,
+                singleLine = true,
+                textStyle = TextStyle(color = Color.White, fontSize = 20.sp),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                decorationBox = { innerTextField ->
+                    Box {
+                        if (state.searchQuery.isEmpty()) {
+                            Text("Buscar por nombre", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                        }
+                        innerTextField()
+                    }
+                },
+                modifier = Modifier
+                    .widthIn(max = 420.dp)
+                    .fillMaxWidth()
+                    .focusRequester(searchFieldFocus)
+                    // El campo consume las flechas del mando; bajar entra en los resultados.
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown &&
+                            event.key == Key.DirectionDown && visibleTitles.isNotEmpty()
+                        ) {
+                            scope.launch {
+                                val firstResultIndex = 1 + if (state.isSearching) 0 else {
+                                    (if (state.continueItems.isNotEmpty()) 1 else 0) +
+                                        (if (recentTitles.isNotEmpty()) 1 else 0)
+                                }
+                                gridState.scrollToItem(firstResultIndex)
+                                firstResultFocus.requestFocus()
+                            }
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(2.dp, MaterialTheme.colorScheme.primary)
+                    .padding(16.dp),
             )
         }
         if (state.serverDown) {
@@ -138,11 +210,12 @@ fun HomeScreen(
                 // se desplazan juntos y nada se queda fuera de pantalla.
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(160.dp),
+                    state = gridState,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    if (state.continueItems.isNotEmpty()) {
+                    if (!state.isSearching && state.continueItems.isNotEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             Column {
                                 Text("Seguir viendo", style = MaterialTheme.typography.titleLarge)
@@ -155,11 +228,33 @@ fun HomeScreen(
                             }
                         }
                     }
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Text("Biblioteca", style = MaterialTheme.typography.titleLarge)
+                    if (!state.isSearching && recentTitles.isNotEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Column {
+                                Text("Añadido recientemente", style = MaterialTheme.typography.titleLarge)
+                                Spacer(Modifier.height(8.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    items(recentTitles, key = { it.id }) { title ->
+                                        TitleCard(title) { onTitleClick(title) }
+                                    }
+                                }
+                            }
+                        }
                     }
-                    items(state.titles, key = { it.id }) { title ->
-                        TitleCard(title) { onTitleClick(title) }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            if (state.isSearching) "Resultados" else "Biblioteca",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    }
+                    if (visibleTitles.isEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) { Text("No se encontraron títulos.") }
+                    }
+                    itemsIndexed(visibleTitles, key = { _, title -> title.id }) { index, title ->
+                        TitleCard(
+                            title,
+                            modifier = if (index == 0) Modifier.focusRequester(firstResultFocus) else Modifier,
+                        ) { onTitleClick(title) }
                     }
                 }
             }
@@ -213,9 +308,9 @@ fun Poster(url: String?, name: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun TitleCard(title: Title, onClick: () -> Unit) {
+private fun TitleCard(title: Title, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Column {
-        TvCard(onClick = onClick, modifier = Modifier.width(160.dp)) {
+        TvCard(onClick = onClick, modifier = modifier.width(160.dp)) {
             Poster(title.posterUrl, title.name, Modifier.width(160.dp).aspectRatio(2f / 3f))
         }
         Spacer(Modifier.height(4.dp))
