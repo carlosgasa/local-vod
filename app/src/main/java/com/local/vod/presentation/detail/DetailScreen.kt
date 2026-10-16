@@ -255,7 +255,7 @@ private fun EpisodeCard(episode: Episode, progress: PlaybackProgress?, modifier:
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             // Los enlaces remotos no tienen miniatura: sin ella la fila sigue siendo solo texto.
             if (episode.thumbUrl != null) {
-                Poster(episode.thumbUrl, episode.name, Modifier.width(112.dp).aspectRatio(16f / 9f))
+                Poster(episode.thumbUrl, episode.name, Modifier.width(96.dp).aspectRatio(16f / 9f))
                 Spacer(Modifier.width(12.dp))
             }
             Column(Modifier.weight(1f)) {
@@ -269,7 +269,7 @@ private fun EpisodeCard(episode: Episode, progress: PlaybackProgress?, modifier:
                     Text(
                         episode.name,
                         style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )

@@ -23,7 +23,9 @@ fun formatBytes(bytes: Long): String {
 
 /** 5400 s -> "1 h 30 min" */
 fun formatDuration(seconds: Long): String {
-    if (seconds <= 0) return "—"
+    if (seconds <= 0) return "\u2014"
+    // Un clip de 12 s no es "0 min": por debajo del minuto se dicen los segundos.
+    if (seconds < 60) return "$seconds s"
     val hours = seconds / 3600
     val minutes = (seconds % 3600) / 60
     return when {
