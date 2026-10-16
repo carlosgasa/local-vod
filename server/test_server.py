@@ -84,6 +84,12 @@ def build_tree(root):
     solo_portada.mkdir()
     (solo_portada / "poster.jpg").write_bytes(b"x")
     (movie / "extra.png").write_bytes(b"x")
+    album = root / "Música 2"
+    (album / "Disco 1").mkdir(parents=True)
+    (album / "cover.jpg").write_bytes(b"portada")
+    (album / "canción 10.mp3").write_bytes(b"audio10")
+    (album / "Disco 1" / "canción 2.flac").write_bytes(b"audio2")
+    (movie / "banda sonora.mp3").write_bytes(b"audio")
 
 
 def test_scan(root):
@@ -173,11 +179,22 @@ def test_http(root):
                                     "url": "/media/Viaje%202/D%C3%ADa%201/foto%203.webp", "bytes": 4}
     assert get(album["photos"][0]["url"]).read() == b"tres"
     assert "Dune (2021)" not in {row["id"] for row in albums}
+    assert "Música 2" not in {item["id"] for item in payload["items"]}
     assert all("addedAt" in i for i in payload["items"])
     assert all("durationSeconds" in e and "thumb" in e and "addedAt" in e
                for i in payload["items"] for s in i["seasons"] for e in s["episodes"])
     thumb = next(i for i in payload["items"] if i["id"] == "Dune (2021)")["seasons"][0]["episodes"][0]["thumb"]
     assert get(thumb).read() == b"jpg"
+    albums = json.loads(get("/api/music").read())["albums"]
+    assert [album["id"] for album in albums] == ["Música 2"], albums
+    album = albums[0]
+    assert album["cover"] == "/media/M%C3%BAsica%202/cover.jpg"
+    assert [track["title"] for track in album["tracks"]] == ["canción 2", "canción 10"]
+    assert album["tracks"][0]["id"] == "Música 2/Disco 1/canción 2.flac"
+    assert album["tracks"][0]["durationSeconds"] == 42
+    assert album["tracks"][1]["durationSeconds"] is None
+    assert album["tracks"][0]["bytes"] == 6
+    assert get(album["tracks"][0]["url"], {"Range": "bytes=0-2"}).read() == b"aud"
     try:
         get("/thumb/..%2F..%2Fstate.json")
         assert False, "miniatura fuera de la carpeta"
@@ -314,7 +331,8 @@ if __name__ == "__main__":
         server.MEDIA_ROOT = root
         server.STATE_FILE = root / "state.json"
         server.DURATIONS_FILE = root / "durations.json"
-        server.DURATIONS_FILE.write_text(json.dumps({"Dune (2021)/Dune.mkv:2048": 123.9}))
+        server.DURATIONS_FILE.write_text(json.dumps({"Dune (2021)/Dune.mkv:2048": 123.9,
+                                                     "Música 2/Disco 1/canción 2.flac:6": 42.5}))
         thumb = server.thumb_path(root / "Dune (2021)" / "Dune.mkv", 2048)
         thumb.parent.mkdir(parents=True)
         thumb.write_bytes(b"jpg")

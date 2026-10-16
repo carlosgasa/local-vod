@@ -68,6 +68,7 @@ fun HomeScreen(
     onSetupClick: () -> Unit,
     onProfileClick: () -> Unit,
     onPhotosClick: () -> Unit,
+    onMusicClick: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -108,6 +109,12 @@ fun HomeScreen(
                 onClick = onPhotosClick,
                 icon = R.drawable.ic_photos,
                 description = "Galería de fotos",
+            )
+            Spacer(Modifier.width(8.dp))
+            TvIconButton(
+                onClick = onMusicClick,
+                icon = R.drawable.ic_music,
+                description = "Música",
             )
             Spacer(Modifier.width(8.dp))
             TvIconButton(

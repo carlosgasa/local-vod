@@ -6,6 +6,7 @@ import com.local.vod.domain.model.Profile
 import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.model.Title
 import com.local.vod.domain.model.PhotoAlbum
+import com.local.vod.domain.model.MusicAlbum
 import kotlinx.coroutines.flow.Flow
 
 interface ServerRepository {
@@ -30,6 +31,10 @@ interface LibraryRepository {
 
 interface PhotoRepository {
     suspend fun albums(): List<PhotoAlbum>
+}
+
+interface MusicRepository {
+    suspend fun albums(): List<MusicAlbum>
 }
 
 interface ProfileRepository {

@@ -31,6 +31,7 @@ MANUAL = Path(__file__).resolve().parent / "manual.html"
 MANUAL_DIR = Path(__file__).resolve().parent / "manual"
 
 VIDEO_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".webm", ".mov", ".ts", ".mpg", ".mpeg", ".wmv", ".flv"}
+AUDIO_EXT = {".mp3", ".m4a", ".flac", ".ogg", ".opus", ".wav", ".aac"}
 SUB_EXT = {".srt", ".ass", ".ssa", ".vtt"}
 # Un archivo de texto con una dirección dentro vale como vídeo: así se pueden
 # meter enlaces desde el explorador de archivos, sin tocar el panel.
@@ -371,6 +372,36 @@ def photo_albums():
                        "cover": find_poster(folder) or photos[0]["url"],
                        "count": len(photos), "photos": photos})
     return albums
+def music():
+    if not MEDIA_ROOT.is_dir():
+        return {"albums": []}
+    durations = load_durations()
+    albums = []
+    pending = []
+    for folder in sorted(MEDIA_ROOT.iterdir(), key=natkey):
+        if not folder.is_dir() or folder.name.startswith(".") or folder.is_symlink():
+            continue
+        files = [p for p in folder.rglob("*") if p.is_file() and not p.is_symlink()]
+        if any(p.suffix.lower() in VIDEO_EXT | LINK_EXT for p in files):
+            continue
+        audio = sorted((p for p in files if p.suffix.lower() in AUDIO_EXT),
+                       key=lambda p: (natkey(p.name), natkey(p.relative_to(folder))))
+        if not audio:
+            continue
+        tracks = []
+        for path in audio:
+            size = path.stat().st_size
+            key = f"{path.relative_to(MEDIA_ROOT)}:{size}"
+            tracks.append({
+                "id": str(path.relative_to(MEDIA_ROOT)), "title": path.stem,
+                "url": media_url(path), "durationSeconds": int(durations[key]) if key in durations else None,
+                "bytes": size,
+            })
+        albums.append({"id": str(folder.relative_to(MEDIA_ROOT)), "title": folder.name,
+                       "cover": find_poster(folder), "tracks": tracks})
+        pending.extend(audio)
+    start_media_scans(pending, thumbnails=False)
+    return {"albums": albums}
 
 
 def lan_ip():
@@ -608,9 +639,9 @@ def generate_thumbs(files):
         _scanning_thumbs = False
 
 
-def start_media_scans(files):
+def start_media_scans(files, thumbnails=True):
     global _scanning_durations, _scanning_thumbs
-    if not files or not ffmpeg_available():
+    if not files or not shutil.which("ffprobe"):
         return
     cache = load_durations()
     if not _scanning_durations and any(
@@ -618,7 +649,7 @@ def start_media_scans(files):
     ):
         _scanning_durations = True
         threading.Thread(target=measure_durations, args=(files,), daemon=True).start()
-    if not _scanning_thumbs and any(
+    if thumbnails and ffmpeg_available() and not _scanning_thumbs and any(
         not thumb_path(p, p.stat().st_size).is_file() for p in files
     ):
         _scanning_thumbs = True
@@ -940,6 +971,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(library())
         if path == "/api/photos":
             return self.send_json({"albums": photo_albums()})
+        if path == "/api/music":
+            return self.send_json(music())
         if path == "/api/duplicates":
             return self.send_json(duplicates())
         if path == "/api/profiles":

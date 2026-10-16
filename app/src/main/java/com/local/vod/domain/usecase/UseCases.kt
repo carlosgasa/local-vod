@@ -8,7 +8,9 @@ import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.domain.model.Title
 import com.local.vod.domain.model.PhotoAlbum
+import com.local.vod.domain.model.MusicAlbum
 import com.local.vod.domain.repository.LibraryRepository
+import com.local.vod.domain.repository.MusicRepository
 import com.local.vod.domain.repository.ProfileRepository
 import com.local.vod.domain.repository.ServerRepository
 import com.local.vod.domain.repository.ProgressRepository
@@ -24,6 +26,10 @@ class GetLibrary @Inject constructor(private val library: LibraryRepository) {
 
 class GetPhotoAlbums @Inject constructor(private val photos: PhotoRepository) {
     suspend operator fun invoke(): List<PhotoAlbum> = photos.albums()
+}
+
+class GetMusicAlbums @Inject constructor(private val music: MusicRepository) {
+    suspend operator fun invoke(): List<MusicAlbum> = music.albums()
 }
 
 class GetTitle @Inject constructor(private val library: LibraryRepository) {
