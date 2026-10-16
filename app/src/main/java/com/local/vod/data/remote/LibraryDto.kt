@@ -39,7 +39,7 @@ data class EpisodeDto(
 data class SubtitleDto(val lang: String, val url: String)
 
 /** Las rutas del servidor son relativas; un enlace remoto ya viene completo. */
-private fun absolute(url: String, baseUrl: String) =
+internal fun absolute(url: String, baseUrl: String) =
     if (url.startsWith("http://") || url.startsWith("https://")) url else baseUrl + url
 
 // El servidor manda rutas relativas ("/media/..."): aquí se vuelven absolutas.

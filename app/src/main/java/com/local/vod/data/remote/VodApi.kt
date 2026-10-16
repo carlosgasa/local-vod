@@ -5,6 +5,7 @@ import com.local.vod.domain.model.Battery
 import com.local.vod.domain.model.Profile
 import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.model.Title
+import com.local.vod.domain.model.PhotoAlbum
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -98,6 +99,10 @@ class VodApi @Inject constructor(
 ) {
     suspend fun library(baseUrl: String): List<Title> = get(baseUrl, "/api/library") { body ->
         json.decodeFromString<LibraryResponse>(body).items.map { it.toDomain(baseUrl.trimEnd('/')) }
+    }
+
+    suspend fun photos(baseUrl: String): List<PhotoAlbum> = get(baseUrl, "/api/photos") { body ->
+        json.decodeFromString<PhotosResponse>(body).albums.map { it.toDomain(baseUrl.trimEnd('/')) }
     }
 
     suspend fun profiles(baseUrl: String): List<Profile> = get(baseUrl, "/api/profiles") { body ->
