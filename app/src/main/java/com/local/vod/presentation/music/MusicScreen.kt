@@ -48,12 +48,19 @@ fun MusicScreen(onBack: () -> Unit, viewModel: MusicViewModel = hiltViewModel())
     val track = playing?.tracks?.getOrNull(state.trackIndex)
 
     Column(Modifier.fillMaxSize().neonBackground().screenPadding()) {
+        // Mismo orden que en fotos y en la pantalla principal: título a la izquierda, botón a la derecha.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                selected?.title ?: "Música",
+                style = MaterialTheme.typography.headlineMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(16.dp))
             TvButton(onClick = { if (selected == null) onBack() else viewModel.select(null) }) {
                 Text("Volver")
             }
-            Spacer(Modifier.width(16.dp))
-            Text(selected?.title ?: "Música", style = MaterialTheme.typography.headlineMedium)
         }
         Spacer(Modifier.height(20.dp))
 

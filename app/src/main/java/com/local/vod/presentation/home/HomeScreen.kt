@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -67,6 +68,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.local.vod.presentation.TvButton
 import com.local.vod.presentation.neonBackground
@@ -127,15 +129,7 @@ fun HomeScreen(
             .neonBackground()
             .screenPadding(),
     ) {
-        // Título a la izquierda y los controles pegados a la derecha, como en cualquier tele.
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text(
-                "Local VOD",
-                style = MaterialTheme.typography.headlineMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+        val controls: @Composable () -> Unit = {
             TvIconButton(
                 onClick = viewModel::toggleSearch,
                 icon = R.drawable.ic_search,
@@ -171,6 +165,28 @@ fun HomeScreen(
                 icon = R.drawable.ic_person,
                 description = state.profileName?.let { "Perfil: $it" } ?: "Elegir perfil",
             )
+        }
+        // Título a la izquierda y los controles pegados a la derecha, como en cualquier tele.
+        // En un celular no caben seis botones al lado del nombre: bajan a su propia fila.
+        if (LocalConfiguration.current.screenWidthDp >= 600) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "Local VOD",
+                    style = MaterialTheme.typography.headlineMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                controls()
+            }
+        } else {
+            Text("Local VOD", style = MaterialTheme.typography.headlineMedium, maxLines = 1)
+            Spacer(Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End,
+                modifier = Modifier.fillMaxWidth(),
+            ) { controls() }
         }
         if (state.searchOpen) {
             Spacer(Modifier.height(12.dp))
@@ -449,6 +465,8 @@ private fun PreviewVideo(url: String, onReady: (Boolean) -> Unit) {
                 isFocusable = false
                 isClickable = false
                 this.player = player
+                // El adelanto es 16:9 y la carátula 2:3: recortar es mejor que dejar franjas negras.
+                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                 setBackgroundColor(android.graphics.Color.BLACK)
             }
         },
