@@ -42,6 +42,8 @@
   <a href="#panel">El panel</a>
   <a href="#carpetas">Poner videos</a>
   <a href="#enlaces">Videos de internet</a>
+  <a href="#fotos">Fotos y música</a>
+  <a href="#subir-app">Subir desde el celular</a>
   <a href="#app">La app</a>
   <a href="#otra">Servidor en otra computadora</a>
   <a href="#subir">Subir videos</a>
@@ -149,6 +151,36 @@
   <li>Los <b>episodios</b> se ordenan por el <code>S01E02</code> del nombre.</li>
   <li>Si los videos están en otro disco, mete un <b>acceso directo (symlink)</b> dentro de <code>media</code>.</li>
 </ul>
+
+<h2 id="fotos">Fotos y música</h2>
+<div class="card">
+  Una carpeta con <b>imágenes</b> y sin ningún video es un álbum de fotos; una con
+  <b>audio</b> (.mp3, .flac, .m4a…) y sin video es un disco. Aparecen en la app en los botones de
+  arriba: el de la foto y el de la nota musical. No hay que configurar nada, basta con dejar la
+  carpeta dentro de la carpeta de medios.
+  <p class="dim" style="margin:10px 0 0">
+    En las fotos, el mando pasa de una a otra con izquierda y derecha; en el celular, deslizando.
+    La música se reproduce en cola: al tocar una pista siguen las siguientes del disco.
+  </p>
+</div>
+
+<h2 id="subir-app">Subir desde el celular, sin navegador</h2>
+<div class="card">
+  En la app, el botón <b>+</b> de arriba abre la pantalla de subir: eliges archivos del celular,
+  escribes la carpeta destino si quieres y se guardan en la biblioteca del servidor. También
+  funciona al revés: desde la galería o cualquier app, <b>Compartir → Local VOD</b>.
+  <p class="dim" style="margin:10px 0 0">
+    Acepta video, audio, imágenes y subtítulos. Cualquier otro tipo de archivo se rechaza.
+  </p>
+</div>
+
+<h2 id="adelanto">El adelanto al enfocar</h2>
+<div class="card">
+  Cuando una carátula lleva <b>5 segundos</b> marcada con el mando (o con el dedo encima en el
+  celular), se reproduce encima un adelanto corto y sin sonido. El servidor lo prepara una sola vez
+  con ffmpeg y lo guarda, así que no se manda el video entero por el wifi solo para una vista previa.
+  Se apaga desde <b>Servidor</b> (el botón de ajustes de la app).
+</div>
 
 <h2 id="app">La app en la tele o el celular</h2>
 
