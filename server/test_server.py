@@ -227,6 +227,8 @@ def test_state_http(tmp, root):
 
     assert put("/api/upload/Nueva%20Serie/T01/ep1.mkv", b"video!")["ok"]
     assert (root / "Nueva Serie" / "T01" / "ep1.mkv").read_bytes() == b"video!"
+    assert put("/api/upload/M%C3%BAsica/canci%C3%B3n.mp3", b"audio!")["ok"]
+    assert (root / "Música" / "canción.mp3").read_bytes() == b"audio!"
     assert not list(root.rglob("*.parte")), "no deben quedar archivos a medias"
 
     # un intento de salirse termina dentro de media, nunca fuera
@@ -234,12 +236,18 @@ def test_state_http(tmp, root):
     assert (root / "fuera.mkv").is_file(), "debe caer dentro de la carpeta de medios"
     assert not (root.parent / "fuera.mkv").exists(), "jamás fuera de la carpeta de medios"
 
-    for bad in ("/api/upload/malo.exe", "/api/upload/"):
+    for bad in ("/api/upload/malo.exe", "/api/upload/malo.sh"):
         try:
             put(bad, b"x")
             assert False, "debería rechazar: " + bad
         except urllib.error.HTTPError as e:
-            assert e.code in (400, 404), (bad, e.code)
+            assert e.code == 400, (bad, e.code)
+
+    try:
+        put("/api/upload/", b"x")
+        assert False, "debería rechazar la ruta vacía"
+    except urllib.error.HTTPError as e:
+        assert e.code == 400, e.code
 
     try:
         post("/api/convert", {"id": "../../etc/passwd"})

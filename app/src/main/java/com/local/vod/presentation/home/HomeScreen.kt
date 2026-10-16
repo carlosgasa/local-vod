@@ -66,6 +66,7 @@ fun HomeScreen(
     onTitleClick: (Title) -> Unit,
     onContinueClick: (ContinueItem) -> Unit,
     onSetupClick: () -> Unit,
+    onUploadClick: () -> Unit,
     onProfileClick: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -107,6 +108,12 @@ fun HomeScreen(
                 onClick = { viewModel.load(refresh = true) },
                 icon = R.drawable.ic_refresh,
                 description = "Volver a cargar la biblioteca",
+            )
+            Spacer(Modifier.width(8.dp))
+            TvIconButton(
+                onClick = onUploadClick,
+                icon = R.drawable.ic_add,
+                description = "Subir archivos",
             )
             Spacer(Modifier.width(8.dp))
             TvIconButton(

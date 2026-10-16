@@ -2,6 +2,7 @@ package com.local.vod.presentation
 
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -12,6 +13,7 @@ import com.local.vod.presentation.home.HomeScreen
 import com.local.vod.presentation.player.PlayerScreen
 import com.local.vod.presentation.profile.ProfileScreen
 import com.local.vod.presentation.setup.SetupScreen
+import com.local.vod.presentation.upload.UploadScreen
 
 // Los ids son rutas de archivo (con barras y espacios): van como query, no como path.
 private fun detailRoute(titleId: String) = "detail?titleId=${Uri.encode(titleId)}"
@@ -19,14 +21,18 @@ private fun playerRoute(episodeId: String, startMs: Long) =
     "player?episodeId=${Uri.encode(episodeId)}&startMs=$startMs"
 
 @Composable
-fun VodNavHost() {
+fun VodNavHost(sharedFiles: ShareSelection, onShareConsumed: () -> Unit) {
     val nav = rememberNavController()
+    LaunchedEffect(sharedFiles.id) {
+        if (sharedFiles.uris.isNotEmpty()) nav.navigate("upload") { launchSingleTop = true }
+    }
     NavHost(navController = nav, startDestination = "home") {
         composable("home") {
             HomeScreen(
                 onTitleClick = { nav.navigate(detailRoute(it.id)) },
                 onContinueClick = { item -> nav.navigate(playerRoute(item.episode.id, item.progress.positionMs)) },
                 onSetupClick = { nav.navigate("setup") },
+                onUploadClick = { nav.navigate("upload") },
                 onProfileClick = { nav.navigate("profiles") },
             )
         }
@@ -35,6 +41,15 @@ fun VodNavHost() {
         }
         composable("setup") {
             SetupScreen(onSaved = { nav.popBackStack() })
+        }
+        composable("upload") {
+            UploadScreen(
+                sharedFiles = sharedFiles.uris,
+                shareId = sharedFiles.id,
+                onShareConsumed = onShareConsumed,
+                onBack = { nav.popBackStack() },
+                onSetup = { nav.navigate("setup") },
+            )
         }
         composable(
             route = "detail?titleId={titleId}",
