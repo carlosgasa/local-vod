@@ -3,9 +3,11 @@ package com.local.vod.domain.usecase
 import com.local.vod.domain.model.ContinueItem
 import com.local.vod.domain.model.Episode
 import com.local.vod.domain.model.Playlist
+import com.local.vod.domain.model.Profile
 import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.domain.model.Title
 import com.local.vod.domain.repository.LibraryRepository
+import com.local.vod.domain.repository.ProfileRepository
 import com.local.vod.domain.repository.ProgressRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -35,7 +37,9 @@ class GetContinueWatching @Inject constructor(
     private val progress: ProgressRepository,
 ) {
     operator fun invoke(): Flow<List<ContinueItem>> = progress.unfinished().map { rows ->
-        val titles = library.titles()
+        // Si todavía no hay servidor, esta vuelta sale vacía pero el flujo sigue vivo:
+        // al sincronizar, Room emite otra vez y entonces sí se puede cruzar con la biblioteca.
+        val titles = runCatching { library.titles() }.getOrElse { return@map emptyList() }
         rows.mapNotNull { row ->
             val title = titles.firstOrNull { it.id == row.titleId } ?: return@mapNotNull null
             val episode = title.episodes.firstOrNull { it.id == row.episodeId } ?: return@mapNotNull null
@@ -55,4 +59,45 @@ class SaveProgress @Inject constructor(private val progress: ProgressRepository)
 
 class ClearProgress @Inject constructor(private val progress: ProgressRepository) {
     suspend operator fun invoke(episodeId: String) = progress.clear(episodeId)
+}
+
+
+/** Trae del servidor lo que el perfil haya visto en cualquier otro aparato. */
+class SyncProgress @Inject constructor(private val progress: ProgressRepository) {
+    suspend operator fun invoke() = progress.sync()
+}
+
+class GetProfiles @Inject constructor(private val profiles: ProfileRepository) {
+    suspend operator fun invoke(): List<Profile> = profiles.available()
+}
+
+class CreateProfile @Inject constructor(private val profiles: ProfileRepository) {
+    suspend operator fun invoke(name: String): Profile? = profiles.create(name)
+}
+
+class SelectProfile @Inject constructor(private val profiles: ProfileRepository) {
+    suspend operator fun invoke(profile: Profile) = profiles.select(profile)
+}
+
+/**
+ * Por dónde seguir una serie: el episodio a medias más reciente y, si no hay
+ * ninguno, el primero sin terminar. Devuelve también desde qué milisegundo.
+ */
+class NextToWatch @Inject constructor() {
+    operator fun invoke(title: Title, progress: Map<String, PlaybackProgress>): Pair<Episode, Long>? {
+        val episodes = title.episodes
+        if (episodes.isEmpty()) return null
+
+        val started = episodes
+            .mapNotNull { episode -> progress[episode.id]?.let { episode to it } }
+            .filter { (_, p) -> p.positionMs > 10_000 && p.fraction < 0.95f }
+            .maxByOrNull { (_, p) -> p.updatedAt }
+        if (started != null) return started.first to started.second.positionMs
+
+        val pending = episodes.firstOrNull { episode ->
+            val seen = progress[episode.id]
+            seen == null || seen.fraction < 0.95f
+        }
+        return pending?.let { it to 0L }
+    }
 }

@@ -35,6 +35,7 @@ data class PlaybackProgress(
     val titleId: String,
     val positionMs: Long,
     val durationMs: Long,
+    val updatedAt: Long = 0L,
 ) {
     val fraction: Float get() = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
 }

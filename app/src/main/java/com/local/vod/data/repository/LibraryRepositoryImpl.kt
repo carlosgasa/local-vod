@@ -1,6 +1,6 @@
 package com.local.vod.data.repository
 
-import com.local.vod.data.remote.LibraryApi
+import com.local.vod.data.remote.VodApi
 import com.local.vod.domain.model.Title
 import com.local.vod.domain.repository.LibraryRepository
 import com.local.vod.domain.repository.ServerRepository
@@ -13,7 +13,7 @@ import javax.inject.Singleton
 /** La biblioteca es pequeña: se cachea en memoria y se recarga a mano. */
 @Singleton
 class LibraryRepositoryImpl @Inject constructor(
-    private val api: LibraryApi,
+    private val api: VodApi,
     private val server: ServerRepository,
 ) : LibraryRepository {
 
@@ -24,7 +24,7 @@ class LibraryRepositoryImpl @Inject constructor(
 
     override suspend fun refresh(): List<Title> = mutex.withLock {
         val base = server.baseUrl.first() ?: throw IllegalStateException("Servidor sin configurar")
-        api.fetch(base).also { cache = it }
+        api.library(base).also { cache = it }
     }
 
     override suspend fun title(id: String): Title? = titles().firstOrNull { it.id == id }

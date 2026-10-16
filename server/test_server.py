@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Self-check del servidor: `python3 test_server.py`. Sin frameworks."""
 
+import json
 import tempfile
 import threading
 import urllib.error
@@ -110,10 +111,80 @@ def test_http(root):
     print("http OK")
 
 
+def test_state(tmp):
+    """Perfiles y progreso compartido: lo que ve la tele lo ve el móvil."""
+    server.STATE_FILE = Path(tmp) / "state.json"
+
+    first = server.profiles()
+    assert len(first) == 1 and first[0]["name"] == "Casa", first
+    assert server.profiles() == first, "no debe crear uno nuevo en cada consulta"
+
+    ana = server.add_profile("  Ana  ")
+    assert ana["name"] == "Ana" and ana["id"] != first[0]["id"]
+    assert server.add_profile("   ") is None, "nombre vacío no crea perfil"
+    assert len(server.profiles()) == 2
+
+    assert server.save_progress(ana["id"], "Serie/S01E01.mkv", "Serie", 60_000, 600_000)
+    assert not server.save_progress(ana["id"], "Serie/S01E01.mkv", "Serie", 60_000, 0), "sin duración no se guarda"
+    assert server.save_progress(ana["id"], "Serie/S01E01.mkv", "Serie", 999_999_999, 600_000)
+    rows = server.progress_of(ana["id"])
+    assert len(rows) == 1 and rows[0]["positionMs"] == 600_000, rows  # recortado a la duración
+    assert rows[0]["episodeId"] == "Serie/S01E01.mkv"
+    assert server.progress_of(first[0]["id"]) == [], "cada perfil ve solo lo suyo"
+
+    renamed = server.rename_profile(ana["id"], "Ana María")
+    assert renamed["name"] == "Ana María"
+    assert server.rename_profile("noexiste", "X") is None
+
+    server.delete_profile(ana["id"])
+    assert [p["id"] for p in server.profiles()] == [first[0]["id"]]
+    assert server.progress_of(ana["id"]) == [], "borrar el perfil borra su progreso"
+    print("estado OK")
+
+
+def test_state_http(tmp, root):
+    server.STATE_FILE = Path(tmp) / "state_http.json"
+    server.MEDIA_ROOT = root
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+    srv.daemon_threads = True
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = "http://127.0.0.1:%d" % srv.server_address[1]
+
+    def post(path, payload):
+        request = urllib.request.Request(
+            base + path, data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        return json.loads(urllib.request.urlopen(request).read())
+
+    def get(path):
+        return json.loads(urllib.request.urlopen(base + path).read())
+
+    casa = get("/api/profiles")["profiles"][0]
+    assert post("/api/progress", {
+        "profile": casa["id"], "episodeId": "Demo/ep.mkv", "titleId": "Demo",
+        "positionMs": 5_000, "durationMs": 50_000,
+    })["ok"]
+    items = get("/api/progress?profile=" + casa["id"])["items"]
+    assert len(items) == 1 and items[0]["positionMs"] == 5_000, items
+    assert get("/api/progress?profile=otro")["items"] == []
+
+    try:
+        post("/api/convert", {"id": "../../etc/passwd"})
+        assert False, "convertir fuera de media debería dar 403"
+    except urllib.error.HTTPError as e:
+        assert e.code == 403, e.code
+
+    srv.shutdown()
+    print("estado por http OK")
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         build_tree(root)
         test_scan(root)
         test_http(root)
+        test_state(tmp)
+        test_state_http(tmp, root)
     print("todo OK")

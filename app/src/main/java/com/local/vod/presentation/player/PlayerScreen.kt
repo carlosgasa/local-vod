@@ -50,6 +50,7 @@ import com.local.vod.presentation.TvButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import com.local.vod.R
 import com.local.vod.domain.model.Episode
 import kotlinx.coroutines.delay
 
@@ -236,8 +237,15 @@ private fun PlaybackErrorPanel(
             )
             Spacer(Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TvButton(onClick = onRetry, modifier = Modifier.focusRequester(focus)) { Text("Reintentar") }
-                if (next != null) TvButton(onClick = onNext) { Text("Siguiente episodio") }
+                TvButton(
+                    onClick = onRetry,
+                    icon = R.drawable.ic_refresh,
+                    text = "Reintentar",
+                    modifier = Modifier.focusRequester(focus),
+                )
+                if (next != null) {
+                    TvButton(onClick = onNext, icon = R.drawable.ic_skip_next, text = "Siguiente episodio")
+                }
             }
         }
     }
@@ -269,10 +277,13 @@ private fun NextEpisodePrompt(
             Text(next.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TvButton(onClick = onPlayNow, modifier = Modifier.focusRequester(focus)) {
-                    Text(if (secondsLeft > 0) "Ver ahora ($secondsLeft)" else "Ver ahora")
-                }
-                TvButton(onClick = onCancel) { Text("Cancelar") }
+                TvButton(
+                    onClick = onPlayNow,
+                    icon = R.drawable.ic_skip_next,
+                    text = if (secondsLeft > 0) "Ver ahora ($secondsLeft)" else "Ver ahora",
+                    modifier = Modifier.focusRequester(focus),
+                )
+                TvButton(onClick = onCancel, icon = R.drawable.ic_close, text = "Cancelar")
             }
         }
     }

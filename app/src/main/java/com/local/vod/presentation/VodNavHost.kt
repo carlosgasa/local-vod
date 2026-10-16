@@ -10,6 +10,7 @@ import androidx.navigation.navArgument
 import com.local.vod.presentation.detail.DetailScreen
 import com.local.vod.presentation.home.HomeScreen
 import com.local.vod.presentation.player.PlayerScreen
+import com.local.vod.presentation.profile.ProfileScreen
 import com.local.vod.presentation.setup.SetupScreen
 
 // Los ids son rutas de archivo (con barras y espacios): van como query, no como path.
@@ -26,7 +27,11 @@ fun VodNavHost() {
                 onTitleClick = { nav.navigate(detailRoute(it.id)) },
                 onContinueClick = { item -> nav.navigate(playerRoute(item.episode.id, item.progress.positionMs)) },
                 onSetupClick = { nav.navigate("setup") },
+                onProfileClick = { nav.navigate("profiles") },
             )
+        }
+        composable("profiles") {
+            ProfileScreen(onChosen = { nav.popBackStack() })
         }
         composable("setup") {
             SetupScreen(onSaved = { nav.popBackStack() })

@@ -4,13 +4,25 @@ Ver los videos de la PC en el Fire TV, en la red local. Sin usuarios, sin nube, 
 un servidor en Python (solo stdlib) con panel web, y una app de Android TV hecha con Kotlin,
 Compose, Media3 y clean architecture.
 
+## Qué hace
+
+- Biblioteca por carpetas con carátula, series con temporadas y episodios.
+- **Perfiles sin contraseña**: cada quien tiene su propio «seguir viendo».
+- **El progreso vive en el servidor**: empiezas un capítulo en el móvil y lo sigues en la tele.
+- Botón **Continuar** en cada serie, reanudar o empezar de nuevo.
+- Cambio de pistas de audio y subtítulos (del archivo y de los `.srt` de al lado).
+- Aviso de **siguiente episodio** con cuenta atrás y opción de cancelar.
+- **Convertir a MP4** desde el panel para archivos que el aparato no decodifica.
+- La app **encuentra el servidor sola** en la red si le cambia la IP a la PC.
+
 ## En la PC
 
 El servidor ya queda instalado como servicio del usuario: arranca con la sesión y se reinicia solo.
 
 - **Panel de control**: icono **Local VOD** en el menú de aplicaciones (abre <http://localhost:8000>).
-- Desde el panel: ver qué contenido detectó, qué carpeta le falta carátula, **Volver a escanear** y
-  **Abrir carpeta de videos**.
+- Desde el panel: ver qué contenido detectó, qué carpeta le falta carátula, **Volver a escanear**,
+  **Abrir carpeta de videos**, gestionar **perfiles** y **convertir a MP4** los vídeos que algún
+  aparato no aguante (usa el ffmpeg del sistema; deja el original y crea una copia al lado).
 - Dirección para la app: la que muestra el panel (ej. `http://192.168.1.100:8000`).
 
 Comandos, solo si hacen falta:
@@ -55,9 +67,11 @@ media/
 
 Alternativa con adb: `adb connect <ip-del-firetv>:5555 && adb install -r dist/app.apk`.
 
-Qué hace la app: carátulas por carpeta, fila de **Seguir viendo**, selector de temporada y
-episodio, **Reanudar** o **Empezar de nuevo**, y cambio de pistas de audio y subtítulos desde los
-ajustes del reproductor (incluye los `.srt` externos). El progreso se guarda en la tele (Room).
+La misma APK vale para **Fire TV, Android TV y móvil**: la interfaz responde al mando (foco
+resaltado con el D-pad) y al dedo.
+
+El progreso se guarda en el servidor por perfil, con una copia local para que la pantalla no
+dependa de que el servidor conteste al instante.
 
 Siguiente episodio: al abrir un episodio se encola el resto de la serie, así que los botones de
 **anterior/siguiente** del reproductor funcionan con el mando, y en los últimos 25 segundos sale el
@@ -73,6 +87,7 @@ server/     servidor + panel (server.py, dashboard.html, test_server.py)
 app/        app Android (domain / data / presentation + Hilt)
 desktop/    servicio systemd, icono del menú e instalador
 media/      tus videos
+data/       perfiles y progreso (state.json)
 dist/       app.apk publicada
 ```
 
@@ -81,4 +96,5 @@ dist/       app.apk publicada
 - **No transcodifica**: el archivo se manda tal cual. Si un video no se oye o no se ve en el Fire
   TV, es que ese codec no lo soporta el aparato (típico con DTS); habría que remuxearlo con ffmpeg.
 - Sin metadata de internet (sinopsis, repartos) ni búsqueda.
-- El progreso es por dispositivo: no se comparte con otra tele.
+- Sin contraseñas: cualquiera en tu red puede abrir el panel y usar cualquier perfil.
+  Para verlo desde fuera de casa, no abras el puerto en el router: usa Tailscale o WireGuard.

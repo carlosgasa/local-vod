@@ -9,18 +9,23 @@ import json
 import mimetypes
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
+import threading
+import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import quote, unquote
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 MEDIA_ROOT = Path(os.environ.get("VOD_MEDIA") or ROOT / "media")
 APK = ROOT / "dist" / "app.apk"
 PORT = int(os.environ.get("VOD_PORT") or 8000)
 DASHBOARD = Path(__file__).resolve().parent / "dashboard.html"
+STATE_FILE = Path(os.environ.get("VOD_STATE") or ROOT / "data" / "state.json")
 
 VIDEO_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".webm", ".mov", ".ts", ".mpg", ".mpeg", ".wmv", ".flv"}
 SUB_EXT = {".srt", ".ass", ".ssa", ".vtt"}
@@ -36,6 +41,99 @@ mimetypes.add_type("video/x-matroska", ".mkv")
 mimetypes.add_type("video/mp2t", ".ts")
 mimetypes.add_type("text/vtt", ".vtt")
 mimetypes.add_type("application/x-subrip", ".srt")
+
+
+# ---------------------------------------------------------------- estado
+
+# Perfiles y progreso viven aquí para que la tele y los móviles vean lo mismo.
+# Un solo lock: esto lo usan cuatro aparatos de una casa, no mil.
+# ponytail: lock global y reescritura completa del json; si algún día son
+# miles de entradas, pasar a sqlite.
+_state_lock = threading.Lock()
+
+
+def load_state():
+    try:
+        return json.loads(STATE_FILE.read_text())
+    except (OSError, ValueError):
+        return {"profiles": [], "progress": {}}
+
+
+def save_state(state):
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = STATE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=1, ensure_ascii=False))
+    tmp.replace(STATE_FILE)  # atómico: nunca deja el archivo a medias
+
+
+def with_state(fn):
+    """Lee, modifica y guarda el estado de una pieza."""
+    with _state_lock:
+        state = load_state()
+        result = fn(state)
+        save_state(state)
+        return result
+
+
+def profiles():
+    def ensure(state):
+        if not state["profiles"]:
+            state["profiles"] = [{"id": uuid.uuid4().hex[:8], "name": "Casa"}]
+        return state["profiles"]
+    return with_state(ensure)
+
+
+def add_profile(name):
+    name = (name or "").strip()[:40]
+    if not name:
+        return None
+
+    def mutate(state):
+        profile = {"id": uuid.uuid4().hex[:8], "name": name}
+        state["profiles"].append(profile)
+        return profile
+    return with_state(mutate)
+
+
+def rename_profile(profile_id, name):
+    name = (name or "").strip()[:40]
+
+    def mutate(state):
+        for profile in state["profiles"]:
+            if profile["id"] == profile_id and name:
+                profile["name"] = name
+                return profile
+        return None
+    return with_state(mutate)
+
+
+def delete_profile(profile_id):
+    def mutate(state):
+        state["profiles"] = [p for p in state["profiles"] if p["id"] != profile_id]
+        state["progress"].pop(profile_id, None)
+        return True
+    return with_state(mutate)
+
+
+def progress_of(profile_id):
+    rows = load_state()["progress"].get(profile_id, {})
+    return [dict(row, episodeId=episode_id) for episode_id, row in rows.items()]
+
+
+def save_progress(profile_id, episode_id, title_id, position_ms, duration_ms):
+    if not profile_id or not episode_id or duration_ms <= 0:
+        return False
+
+    def mutate(state):
+        rows = state["progress"].setdefault(profile_id, {})
+        rows[episode_id] = {
+            "titleId": title_id,
+            "positionMs": max(0, min(position_ms, duration_ms)),
+            "durationMs": duration_ms,
+            "updatedAt": int(time.time() * 1000),
+        }
+        return True
+    return with_state(mutate)
 
 
 # ---------------------------------------------------------------- escaneo
@@ -158,6 +256,97 @@ def library():
     }
 
 
+# ---------------------------------------------------------------- conversión
+
+# Si un aparato no sabe decodificar un archivo (VP9 en un móvil viejo, DTS en
+# la tele), aquí se hace una copia en mp4. Primero se intenta remuxear (copiar
+# el vídeo tal cual, segundos); si el códec no cabe en mp4, se recodifica.
+JOBS = {}
+_jobs_lock = threading.Lock()
+COMPATIBLE_VIDEO = {"h264", "hevc", "mpeg4", "av1"}
+
+
+def ffmpeg_available():
+    return shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+
+
+def probe_duration(path):
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=nw=1:nk=1", str(path)],
+            capture_output=True, text=True, timeout=30,
+        ).stdout.strip()
+        return float(out)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return 0.0
+
+
+def video_codec(path):
+    try:
+        return subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "default=nw=1:nk=1", str(path)],
+            capture_output=True, text=True, timeout=30,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def set_job(job_id, **fields):
+    with _jobs_lock:
+        JOBS.setdefault(job_id, {}).update(fields)
+
+
+def run_ffmpeg(args, job_id, total_seconds):
+    """Lanza ffmpeg y va publicando el porcentaje en el job."""
+    process = subprocess.Popen(
+        args + ["-progress", "pipe:1", "-nostats", "-loglevel", "error"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    for line in process.stdout:
+        if line.startswith("out_time_ms=") and total_seconds > 0:
+            try:
+                done = int(line.split("=", 1)[1]) / 1_000_000
+                set_job(job_id, percent=min(99, int(done / total_seconds * 100)))
+            except ValueError:
+                pass
+    error = process.stderr.read()
+    return process.wait(), error
+
+
+def convert_job(job_id, source):
+    target = source.with_name(f"{source.stem} (convertido).mp4")
+    total = probe_duration(source)
+    set_job(job_id, state="running", percent=0, file=source.name, target=target.name)
+
+    base = ["ffmpeg", "-nostdin", "-y", "-i", str(source)]
+    # audio siempre a aac: es lo que entienden todos los aparatos
+    remux = base + ["-map", "0:v:0", "-map", "0:a?", "-c:v", "copy", "-c:a", "aac", "-movflags", "+faststart", str(target)]
+    recode = base + ["-map", "0:v:0", "-map", "0:a?", "-c:v", "libx264", "-preset", "veryfast",
+                     "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart", str(target)]
+
+    plan = [remux, recode] if video_codec(source) in COMPATIBLE_VIDEO else [recode]
+    for attempt in plan:
+        code, error = run_ffmpeg(attempt, job_id, total)
+        if code == 0:
+            set_job(job_id, state="done", percent=100, message=f"Creado: {target.name}")
+            return
+        lines = (error or "").strip().splitlines()
+        set_job(job_id, message=lines[-1] if lines else "")
+    target.unlink(missing_ok=True)
+    set_job(job_id, state="error", message="ffmpeg no pudo convertirlo")
+
+
+def start_conversion(source):
+    if not ffmpeg_available():
+        return None
+    job_id = uuid.uuid4().hex[:8]
+    set_job(job_id, id=job_id, state="queued", percent=0, file=source.name, message="")
+    threading.Thread(target=convert_job, args=(job_id, source), daemon=True).start()
+    return job_id
+
+
 # ---------------------------------------------------------------- HTTP
 
 class Handler(BaseHTTPRequestHandler):
@@ -248,6 +437,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_bytes(DASHBOARD.read_bytes(), "text/html; charset=utf-8")
         if path == "/api/library":
             return self.send_json(library())
+        if path == "/api/profiles":
+            return self.send_json({"profiles": profiles()})
+        if path == "/api/progress":
+            query = parse_qs(urlparse(self.path).query)
+            profile_id = (query.get("profile") or [""])[0]
+            return self.send_json({"items": progress_of(profile_id)})
+        if path == "/api/jobs":
+            with _jobs_lock:
+                return self.send_json({"jobs": list(JOBS.values()), "ffmpeg": ffmpeg_available()})
         if path == "/app.apk":
             if not APK.is_file():
                 return self.send_bytes(b"compila la app primero", "text/plain", 404)
@@ -263,11 +461,50 @@ class Handler(BaseHTTPRequestHandler):
 
     do_HEAD = do_GET
 
+    def read_json(self):
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            return json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, OSError):
+            return {}
+
     def do_POST(self):
-        if self.path == "/api/open-folder":
+        path = self.path.split("?")[0]
+        if path == "/api/open-folder":
             MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
             subprocess.Popen(["xdg-open", str(MEDIA_ROOT)])
             return self.send_json({"ok": True})
+
+        body = self.read_json()
+
+        if path == "/api/profiles":
+            profile = add_profile(body.get("name"))
+            return self.send_json(profile or {"error": "nombre vacío"}, 200 if profile else 400)
+        if path == "/api/profiles/rename":
+            profile = rename_profile(body.get("id"), body.get("name"))
+            return self.send_json(profile or {"error": "no existe"}, 200 if profile else 404)
+        if path == "/api/profiles/delete":
+            delete_profile(body.get("id"))
+            return self.send_json({"ok": True})
+
+        if path == "/api/progress":
+            ok = save_progress(
+                body.get("profile"), body.get("episodeId"), body.get("titleId"),
+                int(body.get("positionMs") or 0), int(body.get("durationMs") or 0),
+            )
+            return self.send_json({"ok": ok}, 200 if ok else 400)
+
+        if path == "/api/convert":
+            source = self.media_path(body.get("id") or "")
+            if source is None:
+                return self.send_json({"error": "fuera de la carpeta de medios"}, 403)
+            if not source.is_file():
+                return self.send_json({"error": "archivo no encontrado"}, 404)
+            job_id = start_conversion(source)
+            if job_id is None:
+                return self.send_json({"error": "ffmpeg no está instalado"}, 400)
+            return self.send_json({"job": job_id})
+
         self.send_bytes(b"not found", "text/plain", 404)
 
 

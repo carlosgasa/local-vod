@@ -8,9 +8,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
@@ -37,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.vod.presentation.TvButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import com.local.vod.R
 
 @Composable
 fun SetupScreen(
@@ -46,18 +50,24 @@ fun SetupScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val focus = remember { FocusRequester() }
     val saveButton = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    val searchButton = remember { FocusRequester() }
+    // Con mando lo cómodo es entrar y pulsar OK para que busque solo; el teclado
+    // solo aparece si eliges escribir la dirección a mano.
+    LaunchedEffect(Unit) { searchButton.requestFocus() }
 
     Column(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(48.dp),
+            .verticalScroll(rememberScrollState())
+            .imePadding()
+            .padding(32.dp),
     ) {
         Text("Servidor de la PC", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Escribe la dirección que aparece en el dashboard (por ejemplo 192.168.1.100:8000).",
+            "Puedo buscarlo solo en tu red, o escribe la dirección que aparece en el panel de la PC " +
+                "(por ejemplo 192.168.1.100:8000).",
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
         )
         Spacer(Modifier.height(24.dp))
@@ -92,11 +102,18 @@ fun SetupScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             TvButton(
                 onClick = { viewModel.testAndSave(onSaved) },
-                enabled = !state.testing,
+                icon = R.drawable.ic_check,
+                text = if (state.testing) "Probando…" else "Probar y guardar",
+                enabled = !state.testing && !state.searching,
                 modifier = Modifier.focusRequester(saveButton),
-            ) {
-                Text(if (state.testing) "Probando…" else "Probar y guardar")
-            }
+            )
+            TvButton(
+                onClick = { viewModel.search(onSaved) },
+                icon = R.drawable.ic_search,
+                text = if (state.searching) "Buscando…" else "Buscar en mi red",
+                enabled = !state.testing && !state.searching,
+                modifier = Modifier.focusRequester(searchButton),
+            )
         }
 
         if (state.error != null) {

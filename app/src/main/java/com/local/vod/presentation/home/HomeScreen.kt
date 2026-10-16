@@ -14,25 +14,30 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.vod.presentation.TvButton
+import com.local.vod.presentation.TvIconButton
 import com.local.vod.presentation.TvCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import coil3.compose.AsyncImage
+import com.local.vod.R
 import com.local.vod.domain.model.ContinueItem
 import com.local.vod.domain.model.Title
 import com.local.vod.presentation.formatTime
@@ -42,9 +47,15 @@ fun HomeScreen(
     onTitleClick: (Title) -> Unit,
     onContinueClick: (ContinueItem) -> Unit,
     onSetupClick: () -> Unit,
+    onProfileClick: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    // Sin perfil elegido no hay nada que enseñar: se va directo a "¿quién está viendo?"
+    LaunchedEffect(state.needsProfile, state.needsSetup) {
+        if (state.needsProfile && !state.needsSetup) onProfileClick()
+    }
 
     Column(
         Modifier
@@ -52,19 +63,36 @@ fun HomeScreen(
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 32.dp, vertical = 24.dp),
     ) {
+        val compact = LocalConfiguration.current.screenWidthDp < 600
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Local VOD",
-                style = MaterialTheme.typography.headlineMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            Spacer(Modifier.width(16.dp))
+            if (!compact) {
+                Text(
+                    "Local VOD",
+                    style = MaterialTheme.typography.headlineMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Spacer(Modifier.width(16.dp))
+            }
             // maxLines: en un móvil en vertical el texto se partía letra a letra
-            TvButton(onClick = { viewModel.load(refresh = true) }) { Text("Recargar", maxLines = 1) }
+            TvIconButton(
+                onClick = { viewModel.load(refresh = true) },
+                icon = R.drawable.ic_refresh,
+                description = "Volver a cargar la biblioteca",
+            )
             Spacer(Modifier.width(8.dp))
-            TvButton(onClick = onSetupClick) { Text("Servidor", maxLines = 1) }
+            TvIconButton(
+                onClick = onSetupClick,
+                icon = R.drawable.ic_server,
+                description = "Servidor",
+            )
+            Spacer(Modifier.width(8.dp))
+            TvIconButton(
+                onClick = onProfileClick,
+                icon = R.drawable.ic_person,
+                description = state.profileName?.let { "Perfil: $it" } ?: "Elegir perfil",
+            )
         }
         Spacer(Modifier.height(16.dp))
 
@@ -76,6 +104,7 @@ fun HomeScreen(
             state.error != null -> Message(
                 "No se pudo conectar con el servidor:\n${state.error}",
                 actionLabel = "Reintentar",
+                actionIcon = R.drawable.ic_refresh,
                 onAction = { viewModel.load(refresh = true) },
             )
 
@@ -86,24 +115,30 @@ fun HomeScreen(
             )
 
             else -> {
-                if (state.continueItems.isNotEmpty()) {
-                    Text("Seguir viendo", style = MaterialTheme.typography.titleLarge)
-                    Spacer(Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        items(state.continueItems, key = { it.episode.id }) { item ->
-                            ContinueCard(item) { onContinueClick(item) }
-                        }
-                    }
-                    Spacer(Modifier.height(24.dp))
-                }
-                Text("Biblioteca", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(8.dp))
+                // Todo en una sola rejilla: así "Seguir viendo" y la biblioteca
+                // se desplazan juntos y nada se queda fuera de pantalla.
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(160.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
+                    if (state.continueItems.isNotEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Column {
+                                Text("Seguir viendo", style = MaterialTheme.typography.titleLarge)
+                                Spacer(Modifier.height(8.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    items(state.continueItems, key = { it.episode.id }) { item ->
+                                        ContinueCard(item) { onContinueClick(item) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text("Biblioteca", style = MaterialTheme.typography.titleLarge)
+                    }
                     items(state.titles, key = { it.id }) { title ->
                         TitleCard(title) { onTitleClick(title) }
                     }
@@ -114,13 +149,22 @@ fun HomeScreen(
 }
 
 @Composable
-private fun Message(text: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+private fun Message(
+    text: String,
+    actionLabel: String? = null,
+    actionIcon: Int? = null,
+    onAction: (() -> Unit)? = null,
+) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(text, textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
             if (actionLabel != null && onAction != null) {
                 Spacer(Modifier.height(20.dp))
-                TvButton(onClick = onAction) { Text(actionLabel) }
+                if (actionIcon != null) {
+                    TvButton(onClick = onAction, icon = actionIcon, text = actionLabel)
+                } else {
+                    TvButton(onClick = onAction) { Text(actionLabel) }
+                }
             }
         }
     }

@@ -25,6 +25,16 @@
   .warn { color:var(--warn); font-size:14px; }
   code { background:#0f1116; padding:2px 6px; border-radius:4px; font-size:14px; }
   pre { background:#0f1116; padding:14px; border-radius:10px; overflow:auto; font-size:13px; line-height:1.45; }
+  .chip { display:inline-flex; align-items:center; gap:8px; background:#2a3040; border:1px solid var(--line);
+          border-radius:999px; padding:8px 10px 8px 16px; margin:4px 8px 4px 0; }
+  .chip button { padding:4px 8px; margin:0; border-radius:8px; font-size:13px; }
+  input[type=text] { font:inherit; color:var(--txt); background:#0f1116; border:1px solid var(--line);
+                     border-radius:10px; padding:11px 14px; width:220px; }
+  .small { font-size:14px; color:var(--dim); }
+  .bar { height:6px; background:#0f1116; border-radius:3px; overflow:hidden; margin-top:6px; }
+  .bar div { height:6px; background:var(--acc); }
+  td.files { padding:0 8px 10px; }
+  .file { display:flex; align-items:center; gap:12px; justify-content:space-between; padding:4px 0; }
 </style>
 </head>
 <body>
@@ -42,8 +52,23 @@
   <span class="dim" id="mediaRoot"></span>
 </div>
 
+<h2>Quién ve</h2>
+<div class="card">
+  <p class="small" style="margin:0 0 10px">
+    Cada perfil guarda su propio «seguir viendo». Sin contraseñas: se elige al entrar en la app.
+  </p>
+  <div id="profiles"></div>
+  <div style="margin-top:12px">
+    <input type="text" id="newProfile" placeholder="Nombre" maxlength="40">
+    <button onclick="addProfile()">Añadir perfil</button>
+  </div>
+</div>
+
 <h2>Contenido detectado</h2>
 <div id="library"></div>
+
+<h2>Conversiones</h2>
+<div class="card" id="jobs"></div>
 
 <h2>Instalar la app en el Fire TV</h2>
 <div class="card" id="apk"></div>
@@ -68,18 +93,79 @@ async function load() {
 
 function table(items) {
   const rows = items.map(it => {
-    const eps = it.seasons.reduce((n, s) => n + s.episodes.length, 0);
+    const episodes = it.seasons.flatMap(s => s.episodes);
     const poster = it.poster
       ? `<img class="poster" src="${it.poster}" alt="">`
       : `<div class="no-poster"></div>`;
     const kind = it.type === 'movie' ? 'Película'
       : `Serie · ${it.seasons.length} temporada${it.seasons.length > 1 ? 's' : ''}`;
     const warn = it.poster ? '' : `<div class="warn">falta carátula (poster.jpg)</div>`;
+    const files = hasFfmpeg ? episodes.map(e => `
+        <div class="file"><span class="dim">${esc(e.title)}</span>
+        <button onclick="convert('${esc(e.id).replace(/'/g, "\\'")}')">Convertir a MP4</button></div>`).join('') : '';
     return `<tr><td>${poster}</td><td><b>${esc(it.title)}</b>${warn}</td>
-            <td class="dim">${kind}</td><td class="dim">${eps} video${eps > 1 ? 's' : ''}</td></tr>`;
+            <td class="dim">${kind}</td><td class="dim">${episodes.length} video${episodes.length > 1 ? 's' : ''}</td></tr>
+            ${files ? `<tr><td></td><td class="files" colspan="3">${files}</td></tr>` : ''}`;
   }).join('');
   return `<div class="card" style="padding:4px 12px"><table>
     <tr><th></th><th>Título</th><th>Tipo</th><th>Videos</th></tr>${rows}</table></div>`;
+}
+
+let hasFfmpeg = false;
+
+async function loadProfiles() {
+  const { profiles } = await (await fetch('/api/profiles')).json();
+  $('profiles').innerHTML = profiles.map(p => `
+    <span class="chip">${esc(p.name)}
+      <button onclick="renameProfile('${p.id}', '${esc(p.name).replace(/'/g, "\\'")}')">Renombrar</button>
+      <button onclick="deleteProfile('${p.id}', '${esc(p.name).replace(/'/g, "\\'")}')">Borrar</button>
+    </span>`).join('');
+}
+
+async function addProfile() {
+  const name = $('newProfile').value.trim();
+  if (!name) return;
+  await fetch('/api/profiles', { method: 'POST', body: JSON.stringify({ name }) });
+  $('newProfile').value = '';
+  loadProfiles();
+}
+
+async function renameProfile(id, current) {
+  const name = prompt('Nuevo nombre para el perfil', current);
+  if (!name) return;
+  await fetch('/api/profiles/rename', { method: 'POST', body: JSON.stringify({ id, name }) });
+  loadProfiles();
+}
+
+async function deleteProfile(id, name) {
+  if (!confirm(`¿Borrar el perfil «${name}» y su historial de lo visto?`)) return;
+  await fetch('/api/profiles/delete', { method: 'POST', body: JSON.stringify({ id }) });
+  loadProfiles();
+}
+
+async function convert(id) {
+  await fetch('/api/convert', { method: 'POST', body: JSON.stringify({ id }) });
+  loadJobs();
+}
+
+async function loadJobs() {
+  const { jobs, ffmpeg } = await (await fetch('/api/jobs')).json();
+  hasFfmpeg = ffmpeg;
+  if (!ffmpeg) {
+    $('jobs').innerHTML = `<span class="warn">ffmpeg no está instalado: sin botón de convertir.</span>`;
+    return;
+  }
+  $('jobs').innerHTML = jobs.length === 0
+    ? `<span class="dim">Nada convirtiéndose. Usa «Convertir a MP4» en un vídeo que tu tele no aguante
+       (por ejemplo VP9 o DTS): deja el original y crea una copia compatible al lado.</span>`
+    : jobs.map(j => `
+        <div style="margin:10px 0">
+          <b>${esc(j.file || '')}</b>
+          <span class="dim">· ${j.state === 'done' ? 'listo' : j.state === 'error' ? 'error' : j.percent + ' %'}</span>
+          ${j.message ? `<div class="small">${esc(j.message)}</div>` : ''}
+          <div class="bar"><div style="width:${j.state === 'done' ? 100 : (j.percent || 0)}%"></div></div>
+        </div>`).join('');
+  if (jobs.some(j => j.state === 'running' || j.state === 'queued')) setTimeout(loadJobs, 1500);
 }
 
 function empty() {
@@ -103,7 +189,7 @@ function esc(s) { return s.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '
 
 async function openFolder() { await fetch('/api/open-folder', { method: 'POST' }); }
 
-load();
+loadJobs().then(loadProfiles).then(load);
 </script>
 </body>
 </html>

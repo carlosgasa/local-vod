@@ -36,6 +36,7 @@ import com.local.vod.presentation.TvCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import com.local.vod.R
 import com.local.vod.domain.model.Episode
 import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.presentation.formatTime
@@ -90,6 +91,21 @@ fun DetailScreen(
                         val movie = title.episodes.firstOrNull()
                         if (movie != null) MovieActions(movie, state.progress[movie.id], viewModel, onPlay)
                     } else {
+                        val next = state.next
+                        if (next != null) {
+                            val (episode, startMs) = next
+                            val label = if (startMs > 0) {
+                                "Continuar T${episode.season}E${episode.number ?: 1} · ${formatTime(startMs)}"
+                            } else {
+                                "Ver T${episode.season}E${episode.number ?: 1}"
+                            }
+                            TvButton(
+                                onClick = { onPlay(episode.id, startMs) },
+                                icon = R.drawable.ic_play,
+                                text = label,
+                            )
+                            Spacer(Modifier.height(16.dp))
+                        }
                         SeasonEpisodes(title.seasons, state.progress, ::open)
                     }
                 }
@@ -119,14 +135,18 @@ private fun MovieActions(
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         if (progress != null && progress.positionMs > 10_000 && progress.fraction < 0.95f) {
-            TvButton(onClick = { onPlay(movie.id, progress.positionMs) }) {
-                Text("Reanudar ${formatTime(progress.positionMs)}")
-            }
-            TvButton(onClick = { viewModel.restart(movie.id) { onPlay(movie.id, 0L) } }) {
-                Text("Empezar de nuevo")
-            }
+            TvButton(
+                onClick = { onPlay(movie.id, progress.positionMs) },
+                icon = R.drawable.ic_play,
+                text = "Reanudar ${formatTime(progress.positionMs)}",
+            )
+            TvButton(
+                onClick = { viewModel.restart(movie.id) { onPlay(movie.id, 0L) } },
+                icon = R.drawable.ic_replay,
+                text = "Empezar de nuevo",
+            )
         } else {
-            TvButton(onClick = { onPlay(movie.id, 0L) }) { Text("Reproducir") }
+            TvButton(onClick = { onPlay(movie.id, 0L) }, icon = R.drawable.ic_play, text = "Reproducir")
         }
     }
 }
@@ -182,7 +202,8 @@ private fun EpisodeRow(episode: Episode, progress: PlaybackProgress?, onClick: (
                     )
                 }
             }
-            if (progress != null && progress.fraction > 0f) {
+            // menos de 10 s no es "visto": no se pinta barra ni texto
+            if (progress != null && progress.positionMs > 10_000) {
                 Spacer(Modifier.height(8.dp))
                 Box(
                     Modifier
@@ -224,10 +245,13 @@ private fun ResumeDialog(
                 Text(episodeName, style = MaterialTheme.typography.titleLarge, maxLines = 2)
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    TvButton(onClick = onResume, modifier = Modifier.focusRequester(focus)) {
-                        Text("Reanudar ${formatTime(positionMs)}")
-                    }
-                    TvButton(onClick = onRestart) { Text("Empezar de nuevo") }
+                    TvButton(
+                        onClick = onResume,
+                        icon = R.drawable.ic_play,
+                        text = "Reanudar ${formatTime(positionMs)}",
+                        modifier = Modifier.focusRequester(focus),
+                    )
+                    TvButton(onClick = onRestart, icon = R.drawable.ic_replay, text = "Empezar de nuevo")
                 }
             }
         }

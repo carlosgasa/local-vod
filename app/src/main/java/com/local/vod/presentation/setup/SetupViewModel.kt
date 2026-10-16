@@ -14,6 +14,7 @@ import javax.inject.Inject
 data class SetupUiState(
     val address: String = "192.168.1.100:8000",
     val testing: Boolean = false,
+    val searching: Boolean = false,
     val error: String? = null,
 )
 
@@ -48,6 +49,27 @@ class SetupViewModel @Inject constructor(
             } else {
                 _state.update {
                     it.copy(testing = false, error = "No contesta en $url. Revisa que el servidor esté encendido en la PC.")
+                }
+            }
+        }
+    }
+
+    /** Recorre la red local buscando el servidor: útil cuando el router le cambia la IP. */
+    fun search(onSaved: () -> Unit) {
+        viewModelScope.launch {
+            _state.update { it.copy(searching = true, error = null) }
+            val found = runCatching { server.discover() }.getOrNull()
+            if (found != null) {
+                server.save(found)
+                _state.update { it.copy(searching = false, address = found.removePrefix("http://")) }
+                onSaved()
+            } else {
+                _state.update {
+                    it.copy(
+                        searching = false,
+                        error = "No encontré ningún servidor en esta red. Comprueba que la PC esté encendida " +
+                            "y en el mismo wifi.",
+                    )
                 }
             }
         }

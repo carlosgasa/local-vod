@@ -13,6 +13,7 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 
@@ -69,4 +70,49 @@ fun TvCard(
         modifier = modifier.focusHighlight(12),
         content = content,
     )
+}
+
+
+/** Botón con icono y texto: el icono manda, el texto acompaña en las acciones grandes. */
+@Composable
+fun TvButton(
+    onClick: () -> Unit,
+    icon: Int,
+    text: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    androidx.compose.material3.Button(
+        onClick = onClick,
+        modifier = modifier.focusHighlight(24),
+        enabled = enabled,
+    ) {
+        androidx.compose.material3.Icon(
+            painter = androidx.compose.ui.res.painterResource(icon),
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+        )
+        androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+        androidx.compose.material3.Text(text, maxLines = 1)
+    }
+}
+
+/** Solo icono, para la barra de arriba. Lleva descripción para el lector de pantalla. */
+@Composable
+fun TvIconButton(
+    onClick: () -> Unit,
+    icon: Int,
+    description: String,
+    modifier: Modifier = Modifier,
+) {
+    androidx.compose.material3.FilledIconButton(
+        onClick = onClick,
+        modifier = modifier.focusHighlight(28),
+    ) {
+        androidx.compose.material3.Icon(
+            painter = androidx.compose.ui.res.painterResource(icon),
+            contentDescription = description,
+            modifier = Modifier.size(22.dp),
+        )
+    }
 }
