@@ -10,6 +10,7 @@ import androidx.navigation.navArgument
 import com.local.vod.presentation.detail.DetailScreen
 import com.local.vod.presentation.home.HomeScreen
 import com.local.vod.presentation.player.PlayerScreen
+import com.local.vod.presentation.photos.PhotosScreen
 import com.local.vod.presentation.profile.ProfileScreen
 import com.local.vod.presentation.setup.SetupScreen
 
@@ -28,7 +29,11 @@ fun VodNavHost() {
                 onContinueClick = { item -> nav.navigate(playerRoute(item.episode.id, item.progress.positionMs)) },
                 onSetupClick = { nav.navigate("setup") },
                 onProfileClick = { nav.navigate("profiles") },
+                onPhotosClick = { nav.navigate("photos") },
             )
+        }
+        composable("photos") {
+            PhotosScreen(onBack = { nav.popBackStack() })
         }
         composable("profiles") {
             ProfileScreen(onChosen = { nav.popBackStack() })

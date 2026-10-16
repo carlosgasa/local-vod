@@ -74,11 +74,23 @@ def build_tree(root):
 
     (root / "Vacia").mkdir()
 
+    album = root / "Viaje 2"
+    (album / "Día 1").mkdir(parents=True)
+    (album / "cover.jpg").write_bytes(b"portada")
+    (album / "foto 10.JPG").write_bytes(b"diez")
+    (album / "foto 2.png").write_bytes(b"dos")
+    (album / "Día 1" / "foto 3.webp").write_bytes(b"tres")
+    solo_portada = root / "Solo portada"
+    solo_portada.mkdir()
+    (solo_portada / "poster.jpg").write_bytes(b"x")
+    (movie / "extra.png").write_bytes(b"x")
+
 
 def test_scan(root):
     server.MEDIA_ROOT = root
     items = {i["title"]: i for i in server.scan()}
     assert list(items) == ["Breaking Bad", "Cortos", "Dune (2021)"], list(items)
+    assert "Viaje 2" not in items
 
     movie = items["Dune (2021)"]
     assert movie["type"] == "movie", movie
@@ -149,6 +161,18 @@ def test_http(root):
     lib = get("/api/library")
     assert lib.headers["Content-Type"].startswith("application/json")
     payload = json.loads(lib.read())
+    assert "Viaje 2" not in {item["id"] for item in payload["items"]}
+    albums = json.loads(get("/api/photos").read())["albums"]
+    assert "Viaje 2" in {album["id"] for album in albums}, albums
+    assert "Solo portada" not in {album["id"] for album in albums}
+    album = next(row for row in albums if row["id"] == "Viaje 2")
+    assert album["title"] == "Viaje 2" and album["count"] == 3
+    assert album["cover"] == "/media/Viaje%202/cover.jpg"
+    assert [photo["name"] for photo in album["photos"]] == ["foto 3.webp", "foto 2.png", "foto 10.JPG"]
+    assert album["photos"][0] == {"id": "Viaje 2/Día 1/foto 3.webp", "name": "foto 3.webp",
+                                    "url": "/media/Viaje%202/D%C3%ADa%201/foto%203.webp", "bytes": 4}
+    assert get(album["photos"][0]["url"]).read() == b"tres"
+    assert "Dune (2021)" not in {row["id"] for row in albums}
     assert all("addedAt" in i for i in payload["items"])
     assert all("durationSeconds" in e and "thumb" in e and "addedAt" in e
                for i in payload["items"] for s in i["seasons"] for e in s["episodes"])

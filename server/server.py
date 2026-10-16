@@ -37,6 +37,7 @@ SUB_EXT = {".srt", ".ass", ".ssa", ".vtt"}
 LINK_EXT = {".url", ".link"}
 POSTER_STEMS = ("poster", "cover", "folder", "caratula", "carátula")
 POSTER_EXT = (".jpg", ".jpeg", ".png", ".webp")
+PHOTO_EXT = set(POSTER_EXT) | {".gif"}
 CHUNK = 64 * 1024
 
 SEASON_RE = re.compile(r"(?:season|temporada|temp|^s)[\s._-]*0*(\d+)", re.I)
@@ -346,6 +347,30 @@ def scan():
         if item:
             items.append(item)
     return items
+
+
+def photo_albums():
+    if not MEDIA_ROOT.is_dir():
+        return []
+    albums = []
+    for folder in sorted(MEDIA_ROOT.iterdir(), key=natkey):
+        if not folder.is_dir() or folder.name.startswith("."):
+            continue
+        files = [p for p in folder.rglob("*") if p.is_file()]
+        if any(p.suffix.lower() in VIDEO_EXT | LINK_EXT for p in files):
+            continue
+        images = sorted(
+            (p for p in files if p.suffix.lower() in PHOTO_EXT and p.stem.lower() not in POSTER_STEMS),
+            key=lambda p: natkey(p.relative_to(folder)),
+        )
+        if not images:
+            continue
+        photos = [{"id": str(p.relative_to(MEDIA_ROOT)), "name": p.name,
+                   "url": media_url(p), "bytes": p.stat().st_size} for p in images]
+        albums.append({"id": str(folder.relative_to(MEDIA_ROOT)), "title": folder.name,
+                       "cover": find_poster(folder) or photos[0]["url"],
+                       "count": len(photos), "photos": photos})
+    return albums
 
 
 def lan_ip():
@@ -913,6 +938,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_bytes(DASHBOARD.read_bytes(), "text/html; charset=utf-8")
         if path == "/api/library":
             return self.send_json(library())
+        if path == "/api/photos":
+            return self.send_json({"albums": photo_albums()})
         if path == "/api/duplicates":
             return self.send_json(duplicates())
         if path == "/api/profiles":

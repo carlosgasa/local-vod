@@ -7,10 +7,12 @@ import com.local.vod.domain.model.Profile
 import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.domain.model.Title
+import com.local.vod.domain.model.PhotoAlbum
 import com.local.vod.domain.repository.LibraryRepository
 import com.local.vod.domain.repository.ProfileRepository
 import com.local.vod.domain.repository.ServerRepository
 import com.local.vod.domain.repository.ProgressRepository
+import com.local.vod.domain.repository.PhotoRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -18,6 +20,10 @@ import javax.inject.Inject
 class GetLibrary @Inject constructor(private val library: LibraryRepository) {
     suspend operator fun invoke(refresh: Boolean = false): List<Title> =
         if (refresh) library.refresh() else library.titles()
+}
+
+class GetPhotoAlbums @Inject constructor(private val photos: PhotoRepository) {
+    suspend operator fun invoke(): List<PhotoAlbum> = photos.albums()
 }
 
 class GetTitle @Inject constructor(private val library: LibraryRepository) {
