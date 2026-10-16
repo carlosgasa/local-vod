@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,9 +59,11 @@ fun UploadScreen(
     }
 
     Column(Modifier.fillMaxSize().neonBackground().screenPadding()) {
-        Text("Subir", style = MaterialTheme.typography.headlineMedium)
-        Spacer(Modifier.height(16.dp))
-        TvButton(onClick = onBack) { Text("Volver") }
+        // Igual que el resto de pantallas: título a la izquierda y el botón a la derecha.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Subir", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+            TvButton(onClick = onBack) { Text("Volver") }
+        }
         Spacer(Modifier.height(16.dp))
         if (baseUrl == null) {
             Text("Falta configurar el servidor.", style = MaterialTheme.typography.titleMedium)
@@ -89,6 +92,10 @@ fun UploadScreen(
             icon = R.drawable.ic_add,
             enabled = !uploading && files.any { it.result == "Pendiente" },
         )
+        if (files.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            TvButton(onClick = viewModel::clear, enabled = !uploading) { Text("Limpiar lista") }
+        }
         Spacer(Modifier.height(16.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             items(files, key = { it.id }) { file ->

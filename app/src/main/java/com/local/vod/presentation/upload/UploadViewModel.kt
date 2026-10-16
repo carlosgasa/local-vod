@@ -63,6 +63,8 @@ class UploadViewModel @Inject constructor(
                 size = runCatching { resolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L }
                     .getOrDefault(-1L)
             }
+            // Algunas apps comparten sin nombre: el final de la dirección sirve de apaño.
+            if (name.isBlank()) name = uri.lastPathSegment?.substringAfterLast('/').orEmpty()
             UploadFile(
                 id = ++nextId,
                 uri = uri,
@@ -72,6 +74,10 @@ class UploadViewModel @Inject constructor(
             )
         }
         _files.update { it + added }
+    }
+
+    fun clear() {
+        _files.value = emptyList()
     }
 
     fun upload(folder: String) {
