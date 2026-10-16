@@ -16,6 +16,7 @@ data class TitleDto(
     val type: String,
     val poster: String? = null,
     val seasons: List<SeasonDto> = emptyList(),
+    val addedAt: Long = 0,
 )
 
 @Serializable
@@ -29,6 +30,9 @@ data class EpisodeDto(
     val number: Int? = null,
     val url: String,
     val subs: List<SubtitleDto> = emptyList(),
+    val durationSeconds: Long? = null,
+    val thumb: String? = null,
+    val addedAt: Long = 0,
 )
 
 @Serializable
@@ -46,6 +50,7 @@ fun TitleDto.toDomain(baseUrl: String) = Title(
             episodes = season.episodes.map { it.toDomain(id, baseUrl) },
         )
     },
+    addedAt = addedAt,
 )
 
 fun EpisodeDto.toDomain(titleId: String, baseUrl: String) = Episode(
@@ -56,4 +61,7 @@ fun EpisodeDto.toDomain(titleId: String, baseUrl: String) = Episode(
     number = number,
     url = baseUrl + url,
     subs = subs.map { Subtitle(it.lang, baseUrl + it.url) },
+    durationSeconds = durationSeconds,
+    thumbUrl = thumb?.let { baseUrl + it },
+    addedAt = addedAt,
 )

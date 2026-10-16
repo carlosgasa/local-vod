@@ -6,6 +6,8 @@ data class Title(
     val isMovie: Boolean,
     val posterUrl: String?,
     val seasons: List<Season>,
+    /** Cuándo apareció en la carpeta: para la fila de "añadido recientemente". */
+    val addedAt: Long = 0L,
 ) {
     val episodes: List<Episode> get() = seasons.flatMap { it.episodes }
 }
@@ -23,6 +25,11 @@ data class Episode(
     val number: Int?,
     val url: String,
     val subs: List<Subtitle>,
+    /** Duración medida por el servidor con ffprobe, si ya la calculó. */
+    val durationSeconds: Long? = null,
+    /** Fotograma de muestra que genera el servidor. */
+    val thumbUrl: String? = null,
+    val addedAt: Long = 0L,
 )
 
 data class Subtitle(
