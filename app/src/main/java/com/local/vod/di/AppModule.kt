@@ -41,8 +41,10 @@ object AppModule {
     @Provides
     @Singleton
     fun okHttp(): OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        // El wifi de un móvil o de la tele recién despertados tarda: 5 s se quedaban cortos.
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     @Provides

@@ -26,6 +26,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -58,20 +59,24 @@ fun DetailScreen(
         if (resumable) asking = episode else onPlay(episode.id, 0L)
     }
 
+    // En un móvil en vertical no sobra ancho: carátula pequeña y menos margen.
+    val compact = LocalConfiguration.current.screenWidthDp < 600
+    val posterWidth = if (compact) 110.dp else 220.dp
+
     Box(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(32.dp),
+            .padding(if (compact) 16.dp else 32.dp),
     ) {
         when {
             state.error != null -> Text("Error: ${state.error}")
             title == null -> Text("Cargando…")
             else -> Row {
-                Column(Modifier.width(220.dp)) {
-                    Poster(title.posterUrl, title.name, Modifier.width(220.dp).aspectRatio(2f / 3f))
+                Column(Modifier.width(posterWidth)) {
+                    Poster(title.posterUrl, title.name, Modifier.width(posterWidth).aspectRatio(2f / 3f))
                 }
-                Spacer(Modifier.width(32.dp))
+                Spacer(Modifier.width(if (compact) 16.dp else 32.dp))
                 Column(Modifier.fillMaxSize()) {
                     Text(title.name, style = MaterialTheme.typography.headlineMedium)
                     Spacer(Modifier.height(4.dp))

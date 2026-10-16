@@ -53,11 +53,18 @@ fun HomeScreen(
             .padding(horizontal = 32.dp, vertical = 24.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Local VOD", style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.width(24.dp))
-            TvButton(onClick = { viewModel.load(refresh = true) }) { Text("Recargar") }
-            Spacer(Modifier.width(12.dp))
-            TvButton(onClick = onSetupClick) { Text("Servidor") }
+            Text(
+                "Local VOD",
+                style = MaterialTheme.typography.headlineMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(Modifier.width(16.dp))
+            // maxLines: en un móvil en vertical el texto se partía letra a letra
+            TvButton(onClick = { viewModel.load(refresh = true) }) { Text("Recargar", maxLines = 1) }
+            Spacer(Modifier.width(8.dp))
+            TvButton(onClick = onSetupClick) { Text("Servidor", maxLines = 1) }
         }
         Spacer(Modifier.height(16.dp))
 
@@ -66,7 +73,11 @@ fun HomeScreen(
                 "Falta configurar el servidor.\nPulsa «Servidor» y escribe la dirección que muestra el dashboard de la PC.",
             )
 
-            state.error != null -> Message("No se pudo conectar:\n${state.error}")
+            state.error != null -> Message(
+                "No se pudo conectar con el servidor:\n${state.error}",
+                actionLabel = "Reintentar",
+                onAction = { viewModel.load(refresh = true) },
+            )
 
             state.loading && state.titles.isEmpty() -> Message("Cargando biblioteca…")
 
@@ -103,9 +114,15 @@ fun HomeScreen(
 }
 
 @Composable
-private fun Message(text: String) {
+private fun Message(text: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text, textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text, textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
+            if (actionLabel != null && onAction != null) {
+                Spacer(Modifier.height(20.dp))
+                TvButton(onClick = onAction) { Text(actionLabel) }
+            }
+        }
     }
 }
 
