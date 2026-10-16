@@ -37,6 +37,8 @@ import androidx.compose.material3.Text
 import com.local.vod.R
 import com.local.vod.domain.model.Profile
 import com.local.vod.presentation.TvButton
+import com.local.vod.presentation.neonBackground
+import com.local.vod.presentation.screenPadding
 import com.local.vod.presentation.focusHighlight
 
 @Composable
@@ -49,8 +51,8 @@ fun ProfileScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(32.dp),
+            .neonBackground()
+            .screenPadding(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(24.dp))

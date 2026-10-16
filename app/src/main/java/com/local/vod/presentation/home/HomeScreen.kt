@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.vod.presentation.TvButton
+import com.local.vod.presentation.neonBackground
+import com.local.vod.presentation.screenPadding
 import com.local.vod.presentation.TvIconButton
 import com.local.vod.presentation.TvCard
 import androidx.compose.material3.MaterialTheme
@@ -61,22 +63,18 @@ fun HomeScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 32.dp, vertical = 24.dp),
+            .neonBackground()
+            .screenPadding(),
     ) {
-        val compact = LocalConfiguration.current.screenWidthDp < 600
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!compact) {
-                Text(
-                    "Local VOD",
-                    style = MaterialTheme.typography.headlineMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                Spacer(Modifier.width(16.dp))
-            }
-            // maxLines: en un móvil en vertical el texto se partía letra a letra
+        // Título a la izquierda y los controles pegados a la derecha, como en cualquier tele.
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "Local VOD",
+                style = MaterialTheme.typography.headlineMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
             TvIconButton(
                 onClick = { viewModel.load(refresh = true) },
                 icon = R.drawable.ic_refresh,

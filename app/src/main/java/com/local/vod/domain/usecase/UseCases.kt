@@ -47,6 +47,13 @@ class GetContinueWatching @Inject constructor(
             val episode = title.episodes.firstOrNull { it.id == row.episodeId } ?: return@mapNotNull null
             ContinueItem(title, episode, row)
         }
+            // una tarjeta por serie o película: la del episodio más reciente
+            .distinctBy { it.title.id }
+            .take(CONTINUE_LIMIT)
+    }
+
+    private companion object {
+        const val CONTINUE_LIMIT = 5
     }
 }
 

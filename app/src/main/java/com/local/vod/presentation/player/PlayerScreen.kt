@@ -204,7 +204,7 @@ fun PlayerScreen(
                     // Sin cola detrás, al terminar este episodio no salta a ningún sitio.
                     player.removeMediaItems(player.currentMediaItemIndex + 1, player.mediaItemCount)
                 },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(32.dp),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(40.dp),
             )
         }
     }

@@ -53,7 +53,7 @@ fun ServerStatusCard(status: ServerStatus, modifier: Modifier = Modifier) {
         val freePercent = ((1f - status.usedFraction) * 100).toInt()
         StatusRow(
             "Espacio",
-            "${formatBytes(status.freeBytes)} libres de ${formatBytes(status.totalBytes)} ($freePercent %)",
+            "${formatBytes(status.freeBytes)} libres de ${formatBytes(status.totalBytes)} · $freePercent % libre",
         )
         Spacer(Modifier.height(6.dp))
         Box(

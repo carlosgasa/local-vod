@@ -40,6 +40,8 @@ import com.local.vod.R
 import com.local.vod.domain.model.Episode
 import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.presentation.formatTime
+import com.local.vod.presentation.neonBackground
+import com.local.vod.presentation.screenPadding
 import com.local.vod.presentation.home.Poster
 import androidx.compose.runtime.LaunchedEffect
 
@@ -67,8 +69,8 @@ fun DetailScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(if (compact) 16.dp else 32.dp),
+            .neonBackground(intensity = 0.7f)
+            .screenPadding(),
     ) {
         when {
             state.error != null -> Text("Error: ${state.error}")

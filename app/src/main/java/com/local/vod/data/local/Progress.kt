@@ -38,7 +38,7 @@ interface ProgressDao {
         """SELECT * FROM progress
            WHERE profileId = :profileId AND durationMs > 0 AND positionMs > 10000
              AND positionMs * 100 < durationMs * 95
-           ORDER BY updatedAt DESC LIMIT 20""",
+           ORDER BY updatedAt DESC LIMIT 60""",
     )
     fun unfinished(profileId: String): Flow<List<ProgressEntity>>
 
