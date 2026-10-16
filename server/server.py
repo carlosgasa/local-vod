@@ -372,6 +372,16 @@ def scan():
     return items
 
 
+def loose_files(extensions):
+    """Lo que se comparte a la app sin carpeta destino cae en la raíz de la biblioteca:
+    si no se mira ahí, la foto recién subida no aparece en ningún sitio."""
+    return sorted(
+        (p for p in MEDIA_ROOT.iterdir()
+         if p.is_file() and p.suffix.lower() in extensions and p.stem.lower() not in POSTER_STEMS),
+        key=natkey,
+    )
+
+
 def photo_albums():
     if not MEDIA_ROOT.is_dir():
         return []
@@ -393,6 +403,11 @@ def photo_albums():
         albums.append({"id": str(folder.relative_to(MEDIA_ROOT)), "title": folder.name,
                        "cover": find_poster(folder) or photos[0]["url"],
                        "count": len(photos), "photos": photos})
+    loose = [{"id": p.name, "name": p.name, "url": media_url(p), "bytes": p.stat().st_size}
+             for p in loose_files(PHOTO_EXT)]
+    if loose:
+        albums.insert(0, {"id": ".fotos-sueltas", "title": "Fotos sueltas",
+                          "cover": loose[0]["url"], "count": len(loose), "photos": loose})
     return albums
 def music():
     if not MEDIA_ROOT.is_dir():
@@ -422,6 +437,14 @@ def music():
         albums.append({"id": str(folder.relative_to(MEDIA_ROOT)), "title": folder.name,
                        "cover": find_poster(folder), "tracks": tracks})
         pending.extend(audio)
+    loose = loose_files(AUDIO_EXT)
+    if loose:
+        tracks = [{"id": p.name, "title": p.stem, "url": media_url(p),
+                   "durationSeconds": int(durations[f"{p.name}:{p.stat().st_size}"])
+                   if f"{p.name}:{p.stat().st_size}" in durations else None,
+                   "bytes": p.stat().st_size} for p in loose]
+        albums.insert(0, {"id": ".musica-suelta", "title": "Sueltas", "cover": None, "tracks": tracks})
+        pending.extend(loose)
     start_media_scans(pending, thumbnails=False)
     return {"albums": albums}
 

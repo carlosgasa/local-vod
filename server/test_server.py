@@ -84,6 +84,9 @@ def build_tree(root):
     solo_portada.mkdir()
     (solo_portada / "poster.jpg").write_bytes(b"x")
     (movie / "extra.png").write_bytes(b"x")
+    # lo que se comparte sin carpeta destino cae aquí
+    (root / "suelta.jpg").write_bytes(b"suelta")
+    (root / "suelta.mp3").write_bytes(b"sonido")
     album = root / "Música 2"
     (album / "Disco 1").mkdir(parents=True)
     (album / "cover.jpg").write_bytes(b"portada")
@@ -180,6 +183,9 @@ def test_http(root):
                                     "url": "/media/Viaje%202/D%C3%ADa%201/foto%203.webp", "bytes": 4}
     assert get(album["photos"][0]["url"]).read() == b"tres"
     assert "Dune (2021)" not in {row["id"] for row in albums}
+    sueltas = next(row for row in albums if row["id"] == ".fotos-sueltas")
+    assert [photo["name"] for photo in sueltas["photos"]] == ["suelta.jpg"]
+    assert get(sueltas["photos"][0]["url"]).read() == b"suelta"
     assert "Música 2" not in {item["id"] for item in payload["items"]}
     assert all("addedAt" in i for i in payload["items"])
     assert next(i for i in payload["items"] if i["title"] == "Remoto")["preview"] is None
@@ -188,8 +194,8 @@ def test_http(root):
     thumb = next(i for i in payload["items"] if i["id"] == "Dune (2021)")["seasons"][0]["episodes"][0]["thumb"]
     assert get(thumb).read() == b"jpg"
     albums = json.loads(get("/api/music").read())["albums"]
-    assert [album["id"] for album in albums] == ["Música 2"], albums
-    album = albums[0]
+    assert [album["id"] for album in albums] == [".musica-suelta", "Música 2"], albums
+    album = albums[1]
     assert album["cover"] == "/media/M%C3%BAsica%202/cover.jpg"
     assert [track["title"] for track in album["tracks"]] == ["canción 2", "canción 10"]
     assert album["tracks"][0]["id"] == "Música 2/Disco 1/canción 2.flac"
@@ -197,6 +203,7 @@ def test_http(root):
     assert album["tracks"][1]["durationSeconds"] is None
     assert album["tracks"][0]["bytes"] == 6
     assert get(album["tracks"][0]["url"], {"Range": "bytes=0-2"}).read() == b"aud"
+    assert [t["title"] for t in next(a for a in albums if a["id"] == ".musica-suelta")["tracks"]] == ["suelta"]
     preview = next(i for i in payload["items"] if i["id"] == "Dune (2021)")["preview"]
     if server.ffmpeg_available():
         assert get(preview, {"Range": "bytes=1-3"}).read() == b"rev"
