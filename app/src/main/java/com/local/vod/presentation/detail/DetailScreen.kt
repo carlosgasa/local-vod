@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import com.local.vod.R
 import com.local.vod.domain.model.Episode
 import com.local.vod.domain.model.PlaybackProgress
+import com.local.vod.domain.usecase.MarkWatched
 import com.local.vod.presentation.formatTime
 import com.local.vod.presentation.neonBackground
 import com.local.vod.presentation.screenPadding
@@ -63,8 +64,8 @@ fun DetailScreen(
         if (resumable) asking = episode else onPlay(episode.id, 0L)
     }
 
-    // En un móvil en vertical no sobra ancho: carátula pequeña y menos margen.
-    val compact = LocalConfiguration.current.screenWidthDp < 600
+    // En pantallas estrechas queda más espacio para los botones con una carátula pequeña.
+    val compact = LocalConfiguration.current.screenWidthDp < 900
     val posterWidth = if (compact) 110.dp else 220.dp
 
     Box(
@@ -92,7 +93,7 @@ fun DetailScreen(
 
                     if (title.isMovie) {
                         val movie = title.episodes.firstOrNull()
-                        if (movie != null) MovieActions(movie, state.progress[movie.id], viewModel, onPlay)
+                        if (movie != null) MovieActions(movie, state.progress[movie.id], viewModel, onPlay, compact)
                     } else {
                         val next = state.next
                         if (next != null) {
@@ -109,7 +110,7 @@ fun DetailScreen(
                             )
                             Spacer(Modifier.height(16.dp))
                         }
-                        SeasonEpisodes(title.seasons, state.progress, ::open)
+                        SeasonEpisodes(title.seasons, state.progress, compact, ::open, viewModel::setWatched)
                     }
                 }
             }
@@ -135,22 +136,41 @@ private fun MovieActions(
     progress: PlaybackProgress?,
     viewModel: DetailViewModel,
     onPlay: (String, Long) -> Unit,
+    compact: Boolean,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (progress != null && progress.positionMs > 10_000 && progress.fraction < 0.95f) {
-            TvButton(
-                onClick = { onPlay(movie.id, progress.positionMs) },
-                icon = R.drawable.ic_play,
-                text = "Reanudar ${formatTime(progress.positionMs)}",
-            )
-            TvButton(
-                onClick = { viewModel.restart(movie.id) { onPlay(movie.id, 0L) } },
-                icon = R.drawable.ic_replay,
-                text = "Empezar de nuevo",
-            )
-        } else {
-            TvButton(onClick = { onPlay(movie.id, 0L) }, icon = R.drawable.ic_play, text = "Reproducir")
+    if (compact) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MoviePlayButtons(movie, progress, viewModel, onPlay)
+            WatchedButton(movie, progress) { viewModel.setWatched(movie, progress) }
         }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            MoviePlayButtons(movie, progress, viewModel, onPlay)
+            WatchedButton(movie, progress) { viewModel.setWatched(movie, progress) }
+        }
+    }
+}
+
+@Composable
+private fun MoviePlayButtons(
+    movie: Episode,
+    progress: PlaybackProgress?,
+    viewModel: DetailViewModel,
+    onPlay: (String, Long) -> Unit,
+) {
+    if (progress != null && progress.positionMs > 10_000 && progress.fraction < 0.95f) {
+        TvButton(
+            onClick = { onPlay(movie.id, progress.positionMs) },
+            icon = R.drawable.ic_play,
+            text = "Reanudar ${formatTime(progress.positionMs)}",
+        )
+        TvButton(
+            onClick = { viewModel.restart(movie.id) { onPlay(movie.id, 0L) } },
+            icon = R.drawable.ic_replay,
+            text = "Empezar de nuevo",
+        )
+    } else {
+        TvButton(onClick = { onPlay(movie.id, 0L) }, icon = R.drawable.ic_play, text = "Reproducir")
     }
 }
 
@@ -158,9 +178,12 @@ private fun MovieActions(
 private fun SeasonEpisodes(
     seasons: List<com.local.vod.domain.model.Season>,
     progress: Map<String, PlaybackProgress>,
+    compact: Boolean,
     onEpisode: (Episode) -> Unit,
+    onToggleWatched: (Episode, PlaybackProgress?) -> Unit,
 ) {
     var selected by remember { mutableStateOf(seasons.firstOrNull()?.number ?: 1) }
+    var hideWatched by remember { mutableStateOf(false) }
     if (seasons.size > 1) {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(seasons, key = { it.number }) { season ->
@@ -171,17 +194,63 @@ private fun SeasonEpisodes(
         }
         Spacer(Modifier.height(16.dp))
     }
-    val episodes = seasons.firstOrNull { it.number == selected }?.episodes ?: emptyList()
+    TvButton(onClick = { hideWatched = !hideWatched }) {
+        Text(if (hideWatched) "Ver todos" else "Ocultar vistos")
+    }
+    Spacer(Modifier.height(8.dp))
+    val episodes = seasons.firstOrNull { it.number == selected }?.episodes.orEmpty()
+        .filter { !hideWatched || (progress[it.id]?.fraction ?: 0f) < 0.95f }
+    if (episodes.isEmpty() && hideWatched) {
+        Text("No hay episodios pendientes")
+    }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(episodes, key = { it.id }) { episode ->
-            EpisodeRow(episode, progress[episode.id]) { onEpisode(episode) }
+            val saved = progress[episode.id]
+            EpisodeRow(episode, saved, compact, { onEpisode(episode) }) { onToggleWatched(episode, saved) }
         }
     }
 }
 
 @Composable
-private fun EpisodeRow(episode: Episode, progress: PlaybackProgress?, onClick: () -> Unit) {
-    TvCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+private fun EpisodeRow(
+    episode: Episode,
+    progress: PlaybackProgress?,
+    compact: Boolean,
+    onClick: () -> Unit,
+    onToggleWatched: () -> Unit,
+) {
+    if (compact) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            EpisodeCard(episode, progress, Modifier.fillMaxWidth(), onClick)
+            WatchedButton(episode, progress, onToggleWatched)
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            EpisodeCard(episode, progress, Modifier.weight(1f), onClick)
+            WatchedButton(episode, progress, onToggleWatched)
+        }
+    }
+}
+
+@Composable
+private fun WatchedButton(episode: Episode, progress: PlaybackProgress?, onClick: () -> Unit) {
+    val watched = (progress?.fraction ?: 0f) >= 0.95f
+    val canMark = MarkWatched.durationMs(episode, progress) != null
+    TvButton(onClick = onClick, enabled = watched || canMark) {
+        Text(
+            when {
+                watched -> "Marcar no visto"
+                canMark -> "Marcar visto"
+                else -> "Sin duración para marcar visto"
+            },
+            maxLines = 2,
+        )
+    }
+}
+
+@Composable
+private fun EpisodeCard(episode: Episode, progress: PlaybackProgress?, modifier: Modifier, onClick: () -> Unit) {
+    TvCard(onClick = onClick, modifier = modifier) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -223,7 +292,7 @@ private fun EpisodeRow(episode: Episode, progress: PlaybackProgress?, onClick: (
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "visto hasta ${formatTime(progress.positionMs)}",
+                    if (progress.fraction >= 0.95f) "✓ Visto" else "Visto hasta ${formatTime(progress.positionMs)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )

@@ -9,6 +9,7 @@ import com.local.vod.domain.model.Title
 import com.local.vod.domain.usecase.ClearProgress
 import com.local.vod.domain.usecase.GetTitle
 import com.local.vod.domain.usecase.GetTitleProgress
+import com.local.vod.domain.usecase.MarkWatched
 import com.local.vod.domain.usecase.NextToWatch
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +34,7 @@ class DetailViewModel @Inject constructor(
     getTitleProgress: GetTitleProgress,
     private val nextToWatch: NextToWatch,
     private val clearProgress: ClearProgress,
+    private val markWatched: MarkWatched,
 ) : ViewModel() {
 
     private val titleId: String = checkNotNull(savedState["titleId"])
@@ -56,6 +58,13 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             clearProgress(episodeId)
             onDone()
+        }
+    }
+
+    fun setWatched(episode: Episode, saved: PlaybackProgress?) {
+        viewModelScope.launch {
+            if ((saved?.fraction ?: 0f) >= 0.95f) clearProgress(episode.id)
+            else markWatched(episode, saved)
         }
     }
 }

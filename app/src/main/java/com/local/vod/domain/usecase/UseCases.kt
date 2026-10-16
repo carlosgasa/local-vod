@@ -120,3 +120,19 @@ class GetServerStatus @Inject constructor(private val server: ServerRepository) 
 class IsServerAlive @Inject constructor(private val server: ServerRepository) {
     suspend operator fun invoke(): Boolean = server.isAlive()
 }
+
+/** Guarda el episodio completo usando la duración conocida por el reproductor o el servidor. */
+class MarkWatched @Inject constructor(private val progress: ProgressRepository) {
+    suspend operator fun invoke(episode: Episode, saved: PlaybackProgress?) {
+        val durationMs = durationMs(episode, saved) ?: return
+        progress.save(episode, durationMs, durationMs)
+    }
+
+    companion object {
+        fun durationMs(episode: Episode, saved: PlaybackProgress?): Long? =
+            saved?.durationMs?.takeIf { it > 0 }
+                ?: episode.durationSeconds
+                    ?.takeIf { it in 1..Long.MAX_VALUE / 1_000 }
+                    ?.times(1_000)
+    }
+}
