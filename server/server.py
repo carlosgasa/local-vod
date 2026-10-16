@@ -196,7 +196,11 @@ def link_items():
             "season": 1,
             "number": None,
             "url": url,
+            "remote": True,
             "subs": [],
+            # un enlace no se mide ni se miniaturiza: el archivo no está aquí
+            "durationSeconds": None,
+            "thumb": None,
             "addedAt": link.get("addedAt", 0),
         }
         items.append({
