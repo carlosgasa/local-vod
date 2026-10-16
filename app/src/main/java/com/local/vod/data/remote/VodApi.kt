@@ -1,5 +1,7 @@
 package com.local.vod.data.remote
 
+import android.content.ContentResolver
+import android.net.Uri
 import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.domain.model.Battery
 import com.local.vod.domain.model.Profile
@@ -14,7 +16,11 @@ import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType
+import okio.BufferedSink
+import org.json.JSONObject
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -98,6 +104,54 @@ class VodApi @Inject constructor(
     private val client: OkHttpClient,
     private val json: Json,
 ) {
+    suspend fun upload(
+        baseUrl: String,
+        resolver: ContentResolver,
+        uri: Uri,
+        path: String,
+        size: Long,
+        onProgress: (Int) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        val body = object : RequestBody() {
+            override fun contentType(): MediaType = "application/octet-stream".toMediaType()
+            override fun contentLength(): Long = size
+            override fun isOneShot(): Boolean = true
+
+            override fun writeTo(sink: BufferedSink) {
+                val input = resolver.openInputStream(uri) ?: throw IOException("No se pudo abrir el archivo")
+                input.use {
+                    val buffer = ByteArray(64 * 1024)
+                    var sent = 0L
+                    var lastPercent = -1
+                    while (true) {
+                        val count = it.read(buffer)
+                        if (count < 0) break
+                        sink.write(buffer, 0, count)
+                        sent += count
+                        val percent = (sent * 100 / size).toInt().coerceAtMost(100)
+                        if (percent != lastPercent) {
+                            onProgress(percent)
+                            lastPercent = percent
+                        }
+                    }
+                    if (sent != size) throw IOException("El tamaño del archivo cambió durante la subida")
+                }
+            }
+        }
+        val request = Request.Builder()
+            .url(baseUrl.trimEnd('/') + "/api/upload/" + path.split('/').joinToString("/") { Uri.encode(it) })
+            .put(body)
+            .build()
+        // Los videos grandes pueden tardar mucho más que el límite normal de escritura.
+        client.newBuilder().writeTimeout(0, java.util.concurrent.TimeUnit.SECONDS).build()
+            .newCall(request).execute().use { response ->
+                val payload = response.body.string()
+                if (!response.isSuccessful) {
+                    val message = runCatching { JSONObject(payload).optString("error") }.getOrNull()
+                    throw IOException(message?.takeIf { it.isNotBlank() } ?: "HTTP ${response.code}")
+                }
+            }
+    }
     suspend fun library(baseUrl: String): List<Title> = get(baseUrl, "/api/library") { body ->
         json.decodeFromString<LibraryResponse>(body).items.map { it.toDomain(baseUrl.trimEnd('/')) }
     }

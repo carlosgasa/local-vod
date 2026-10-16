@@ -33,6 +33,7 @@ MANUAL_DIR = Path(__file__).resolve().parent / "manual"
 VIDEO_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".webm", ".mov", ".ts", ".mpg", ".mpeg", ".wmv", ".flv"}
 AUDIO_EXT = {".mp3", ".m4a", ".flac", ".ogg", ".opus", ".wav", ".aac"}
 SUB_EXT = {".srt", ".ass", ".ssa", ".vtt"}
+AUDIO_EXT = {".mp3", ".m4a", ".flac", ".ogg", ".opus", ".wav", ".aac"}
 # Un archivo de texto con una dirección dentro vale como vídeo: así se pueden
 # meter enlaces desde el explorador de archivos, sin tocar el panel.
 LINK_EXT = {".url", ".link"}
@@ -778,8 +779,7 @@ def status():
 
 # ---------------------------------------------------------------- subida
 
-# Subir desde el panel evita pelearse con los permisos de Android: el servidor
-# escribe en SU carpeta de medios y nadie necesita acceso al resto del aparato.
+# El servidor escribe en SU carpeta de medios; los clientes no necesitan acceso a ella.
 def safe_target(relative):
     """Ruta destino dentro de media/, sin trucos: nada de .. ni rutas absolutas."""
     parts = [p for p in unquote(relative).replace("\\", "/").split("/") if p not in ("", ".", "..")]
@@ -788,7 +788,7 @@ def safe_target(relative):
     target = Path(os.path.normpath(MEDIA_ROOT.joinpath(*parts)))
     if MEDIA_ROOT not in target.parents:
         return None
-    if target.suffix.lower() not in VIDEO_EXT | SUB_EXT | set(POSTER_EXT):
+    if target.suffix.lower() not in VIDEO_EXT | SUB_EXT | AUDIO_EXT | PHOTO_EXT:
         return None
     return target
 
