@@ -9,6 +9,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.local.vod.presentation.detail.DetailScreen
 import com.local.vod.presentation.home.HomeScreen
+import com.local.vod.presentation.music.MusicScreen
 import com.local.vod.presentation.player.PlayerScreen
 import com.local.vod.presentation.profile.ProfileScreen
 import com.local.vod.presentation.setup.SetupScreen
@@ -28,10 +29,14 @@ fun VodNavHost() {
                 onContinueClick = { item -> nav.navigate(playerRoute(item.episode.id, item.progress.positionMs)) },
                 onSetupClick = { nav.navigate("setup") },
                 onProfileClick = { nav.navigate("profiles") },
+                onMusicClick = { nav.navigate("music") },
             )
         }
         composable("profiles") {
             ProfileScreen(onChosen = { nav.popBackStack() })
+        }
+        composable("music") {
+            MusicScreen(onBack = { nav.popBackStack() })
         }
         composable("setup") {
             SetupScreen(onSaved = { nav.popBackStack() })

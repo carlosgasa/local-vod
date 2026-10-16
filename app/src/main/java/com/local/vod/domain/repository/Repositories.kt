@@ -5,6 +5,7 @@ import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.domain.model.Profile
 import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.model.Title
+import com.local.vod.domain.model.MusicAlbum
 import kotlinx.coroutines.flow.Flow
 
 interface ServerRepository {
@@ -25,6 +26,10 @@ interface LibraryRepository {
     suspend fun titles(): List<Title>
     suspend fun refresh(): List<Title>
     suspend fun title(id: String): Title?
+}
+
+interface MusicRepository {
+    suspend fun albums(): List<MusicAlbum>
 }
 
 interface ProfileRepository {

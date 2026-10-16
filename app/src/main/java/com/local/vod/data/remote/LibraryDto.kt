@@ -1,9 +1,11 @@
 package com.local.vod.data.remote
 
 import com.local.vod.domain.model.Episode
+import com.local.vod.domain.model.MusicAlbum
 import com.local.vod.domain.model.Season
 import com.local.vod.domain.model.Subtitle
 import com.local.vod.domain.model.Title
+import com.local.vod.domain.model.Track
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -38,8 +40,28 @@ data class EpisodeDto(
 @Serializable
 data class SubtitleDto(val lang: String, val url: String)
 
+@Serializable
+data class MusicResponse(val albums: List<MusicAlbumDto> = emptyList())
+
+@Serializable
+data class MusicAlbumDto(
+    val id: String,
+    val title: String,
+    val cover: String? = null,
+    val tracks: List<TrackDto> = emptyList(),
+)
+
+@Serializable
+data class TrackDto(
+    val id: String,
+    val title: String,
+    val url: String,
+    val durationSeconds: Long? = null,
+    val bytes: Long = 0,
+)
+
 /** Las rutas del servidor son relativas; un enlace remoto ya viene completo. */
-private fun absolute(url: String, baseUrl: String) =
+fun absolute(url: String, baseUrl: String) =
     if (url.startsWith("http://") || url.startsWith("https://")) url else baseUrl + url
 
 // El servidor manda rutas relativas ("/media/..."): aquí se vuelven absolutas.
@@ -68,4 +90,11 @@ fun EpisodeDto.toDomain(titleId: String, baseUrl: String) = Episode(
     durationSeconds = durationSeconds,
     thumbUrl = thumb?.let { absolute(it, baseUrl) },
     addedAt = addedAt,
+)
+
+fun MusicAlbumDto.toDomain(baseUrl: String) = MusicAlbum(
+    id = id,
+    title = title,
+    coverUrl = cover?.let { absolute(it, baseUrl) },
+    tracks = tracks.map { Track(it.id, it.title, absolute(it.url, baseUrl), it.durationSeconds) },
 )

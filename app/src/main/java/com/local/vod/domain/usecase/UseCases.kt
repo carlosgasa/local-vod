@@ -7,7 +7,9 @@ import com.local.vod.domain.model.Profile
 import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.domain.model.Title
+import com.local.vod.domain.model.MusicAlbum
 import com.local.vod.domain.repository.LibraryRepository
+import com.local.vod.domain.repository.MusicRepository
 import com.local.vod.domain.repository.ProfileRepository
 import com.local.vod.domain.repository.ServerRepository
 import com.local.vod.domain.repository.ProgressRepository
@@ -18,6 +20,10 @@ import javax.inject.Inject
 class GetLibrary @Inject constructor(private val library: LibraryRepository) {
     suspend operator fun invoke(refresh: Boolean = false): List<Title> =
         if (refresh) library.refresh() else library.titles()
+}
+
+class GetMusicAlbums @Inject constructor(private val music: MusicRepository) {
+    suspend operator fun invoke(): List<MusicAlbum> = music.albums()
 }
 
 class GetTitle @Inject constructor(private val library: LibraryRepository) {
