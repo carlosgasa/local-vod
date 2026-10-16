@@ -63,6 +63,12 @@ fun SetupScreen(
             .imePadding()
             .padding(32.dp),
     ) {
+        val status = state.status
+        if (status != null) {
+            ServerStatusCard(status)
+            Spacer(Modifier.height(24.dp))
+        }
+
         Text("Servidor de la PC", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(8.dp))
         Text(

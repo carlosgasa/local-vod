@@ -3,6 +3,7 @@ package com.local.vod.domain.repository
 import com.local.vod.domain.model.Episode
 import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.domain.model.Profile
+import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.model.Title
 import kotlinx.coroutines.flow.Flow
 
@@ -13,6 +14,10 @@ interface ServerRepository {
     suspend fun probe(baseUrl: String): Boolean
     /** Busca el servidor por la red local cuando la dirección guardada ya no vale. */
     suspend fun discover(): String?
+    /** Datos del servidor: espacio, biblioteca, batería del aparato que lo hospeda. */
+    suspend fun status(): ServerStatus
+    /** Un toque rápido para saber si sigue vivo. */
+    suspend fun isAlive(): Boolean
 }
 
 interface LibraryRepository {

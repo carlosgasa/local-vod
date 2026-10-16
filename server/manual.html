@@ -43,6 +43,7 @@
   <a href="#carpetas">Poner videos</a>
   <a href="#app">La app</a>
   <a href="#otra">Servidor en otra computadora</a>
+  <a href="#subir">Subir videos</a>
   <a href="#problemas">Si algo falla</a>
 </p>
 
@@ -103,6 +104,18 @@
   <tr><td>Añadir perfil</td><td>Crea un perfil (Renombrar / Borrar al lado de cada uno).</td></tr>
   <tr><td>Convertir a MP4</td><td>Para un video que algún aparato no reproduzca. Deja el original y crea una copia compatible al lado.</td></tr>
 </table>
+
+<h2 id="subir">Meter videos sin tocar carpetas</h2>
+<div class="card">
+  En el panel, <b>Subir videos</b> → <i>Elegir archivos…</i>. Puedes escribir una carpeta destino
+  (por ejemplo <code>Breaking Bad/Temporada 01</code>) y se crea sola. Sirve desde cualquier
+  aparato de la casa, incluido el propio celular.
+  <p class="dim" style="margin:10px 0 0">
+    Es la vía recomendada cuando el servidor corre en un <b>celular con Termux</b>: Android no deja
+    que el servidor lea la tarjeta, pero sí puede guardar en su propia carpeta. El archivo solo
+    aparece en la biblioteca cuando termina de subir.
+  </p>
+</div>
 
 <h2 id="carpetas">Poner videos: una carpeta = una película o una serie</h2>
 <pre>media/
@@ -194,6 +207,22 @@ toque.</p>
 <p class="dim">Deja el servidor arrancando con la sesión y pone el icono «Local VOD» en el menú,
 igual que en esta computadora.</p>
 
+<h3>Un celular Android viejo (Termux)</h3>
+<ol>
+  <li>Instala <b>Termux</b> y <b>Termux:Boot</b> (de GitHub, no de la Play Store) y, para ver la
+      batería en la app, <b>Termux:API</b> más <code>pkg install termux-api</code>.</li>
+  <li><code>pkg install python</code>, copia <code>server.py</code> en <code>~/vod/server/</code> y
+      ejecútalo. Déjalo con <code>termux-wake-lock</code> para que siga sirviendo con la pantalla
+      apagada.</li>
+  <li>En MIUI y parecidos: Ajustes → Apps → Termux → <b>Sin restricciones</b> de batería e
+      <b>Inicio automático</b>, o el sistema lo matará.</li>
+  <li>Mete los videos con <b>Subir videos</b> desde el panel: así no hace falta darle acceso a la
+      tarjeta.</li>
+</ol>
+<p class="dim">Rinde de sobra para servir (4 MB/s con la pantalla apagada en un Redmi Note 8 Pro),
+pero el límite es el almacenamiento del teléfono y conviene vigilar la batería si queda enchufado
+todo el día.</p>
+
 <h3>Una máquina que vive encendida y sin pantalla</h3>
 <p>Un mini PC de segunda mano, un thin client, una PC vieja o una Raspberry Pi:</p>
 <pre>sudo bash desktop/install-server.sh /ruta/donde/esten/los/videos</pre>
@@ -225,6 +254,10 @@ Si los videos están en un disco USB, móntalo siempre en la misma ruta y pásas
   <tr><td>Quiero empezar una serie desde cero</td>
       <td>En el episodio, <b>Empezar de nuevo</b>. Para borrar todo lo visto de alguien, borra su
           perfil desde el panel.</td></tr>
+  <tr><td>Saber si el servidor sigue vivo</td>
+      <td>La app lo comprueba cada minuto y avisa en la pantalla principal si deja de responder.
+          En <b>Servidor</b> ves espacio libre, tamaño y duración de la biblioteca y, si el
+          servidor es un celular, su batería y temperatura.</td></tr>
   <tr><td>Ver desde fuera de casa</td>
       <td>No abras el puerto en el router. Instala Tailscale o WireGuard en la computadora y en el
           celular: así es como si siguieras en casa.</td></tr>

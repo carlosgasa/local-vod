@@ -169,6 +169,27 @@ def test_state_http(tmp, root):
     assert len(items) == 1 and items[0]["positionMs"] == 5_000, items
     assert get("/api/progress?profile=otro")["items"] == []
 
+    # subida: entra en media/, respeta subcarpetas y rechaza lo que no toca
+    def put(path, data):
+        request = urllib.request.Request(base + path, data=data, method="PUT")
+        return json.loads(urllib.request.urlopen(request).read())
+
+    assert put("/api/upload/Nueva%20Serie/T01/ep1.mkv", b"video!")["ok"]
+    assert (root / "Nueva Serie" / "T01" / "ep1.mkv").read_bytes() == b"video!"
+    assert not list(root.rglob("*.parte")), "no deben quedar archivos a medias"
+
+    # un intento de salirse termina dentro de media, nunca fuera
+    assert put("/api/upload/..%2F..%2Ffuera.mkv", b"x")["ok"]
+    assert (root / "fuera.mkv").is_file(), "debe caer dentro de la carpeta de medios"
+    assert not (root.parent / "fuera.mkv").exists(), "jamás fuera de la carpeta de medios"
+
+    for bad in ("/api/upload/malo.exe", "/api/upload/"):
+        try:
+            put(bad, b"x")
+            assert False, "debería rechazar: " + bad
+        except urllib.error.HTTPError as e:
+            assert e.code in (400, 404), (bad, e.code)
+
     try:
         post("/api/convert", {"id": "../../etc/passwd"})
         assert False, "convertir fuera de media debería dar 403"

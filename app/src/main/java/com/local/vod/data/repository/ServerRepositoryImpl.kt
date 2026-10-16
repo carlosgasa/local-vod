@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.local.vod.data.remote.VodApi
+import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.repository.ServerRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -35,6 +36,16 @@ class ServerRepositoryImpl @Inject constructor(
 
     override suspend fun probe(baseUrl: String): Boolean =
         runCatching { api.profiles(baseUrl) }.isSuccess
+
+    override suspend fun status(): ServerStatus = api.status(base())
+
+    override suspend fun isAlive(): Boolean {
+        val base = baseUrl.first() ?: return false
+        return runCatching { api.profiles(base) }.isSuccess
+    }
+
+    private suspend fun base(): String =
+        baseUrl.first() ?: throw IllegalStateException("Servidor sin configurar")
 
     /**
      * Si el router le cambia la IP a la PC, nadie quiere reconfigurar tres aparatos:

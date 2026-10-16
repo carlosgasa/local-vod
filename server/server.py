@@ -349,6 +349,187 @@ def start_conversion(source):
     return job_id
 
 
+# ---------------------------------------------------------------- estado del servidor
+
+DURATIONS_FILE = STATE_FILE.parent / "durations.json"
+_durations_lock = threading.Lock()
+_scanning_durations = False
+
+
+def battery():
+    """Batería del aparato que hace de servidor, si lo tiene (un celular, un portátil)."""
+    # Android con Termux:API
+    if shutil.which("termux-battery-status"):
+        try:
+            out = subprocess.run(["termux-battery-status"], capture_output=True, text=True, timeout=10).stdout
+            data = json.loads(out)
+            return {
+                "percent": data.get("percentage"),
+                "charging": data.get("status") == "CHARGING",
+                "temperature": data.get("temperature"),
+            }
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return None
+    # Linux con batería (portátil)
+    for base in sorted(Path("/sys/class/power_supply").glob("BAT*")):
+        try:
+            return {
+                "percent": int((base / "capacity").read_text().strip()),
+                "charging": (base / "status").read_text().strip() == "Charging",
+                "temperature": None,
+            }
+        except OSError:
+            continue
+    return None
+
+
+def cpu_temperature():
+    for zone in sorted(Path("/sys/class/thermal").glob("thermal_zone*/temp")):
+        try:
+            value = int(zone.read_text().strip()) / 1000
+            if 10 < value < 120:
+                return round(value, 1)
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def uptime_seconds():
+    try:
+        return int(float(Path("/proc/uptime").read_text().split()[0]))
+    except (OSError, ValueError):
+        return None
+
+
+def video_files():
+    if not MEDIA_ROOT.is_dir():
+        return []
+    return [p for p in MEDIA_ROOT.rglob("*") if p.is_file() and p.suffix.lower() in VIDEO_EXT]
+
+
+def load_durations():
+    try:
+        return json.loads(DURATIONS_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def measure_durations(files):
+    """ffprobe es lento: se mide una vez por archivo y se guarda (clave: ruta+tamaño)."""
+    global _scanning_durations
+    cache = load_durations()
+    try:
+        for path in files:
+            key = f"{path.relative_to(MEDIA_ROOT)}:{path.stat().st_size}"
+            if key in cache:
+                continue
+            cache[key] = probe_duration(path)
+            with _durations_lock:
+                DURATIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                DURATIONS_FILE.write_text(json.dumps(cache))
+    finally:
+        _scanning_durations = False
+
+
+def library_stats():
+    global _scanning_durations
+    files = video_files()
+    total_bytes = sum(f.stat().st_size for f in files)
+    cache = load_durations()
+
+    seconds, missing = 0.0, 0
+    for path in files:
+        key = f"{path.relative_to(MEDIA_ROOT)}:{path.stat().st_size}"
+        if key in cache:
+            seconds += cache[key]
+        else:
+            missing += 1
+
+    # lo que falte se mide en segundo plano: el panel no se queda esperando a ffprobe
+    if missing and ffmpeg_available() and not _scanning_durations:
+        _scanning_durations = True
+        threading.Thread(target=measure_durations, args=(files,), daemon=True).start()
+
+    return {
+        "videos": len(files),
+        "bytes": total_bytes,
+        "seconds": int(seconds),
+        "pending": missing,
+    }
+
+
+def status():
+    usage = shutil.disk_usage(MEDIA_ROOT if MEDIA_ROOT.is_dir() else ROOT)
+    items = scan()
+    stats = library_stats()
+    return {
+        "host": {
+            "name": socket.gethostname(),
+            "system": " ".join(os.uname()[:1] + os.uname()[2:3]),
+            "python": sys.version.split()[0],
+            "uptimeSeconds": uptime_seconds(),
+            "temperature": cpu_temperature(),
+        },
+        "network": {"ip": lan_ip(), "port": PORT},
+        "storage": {
+            "path": str(MEDIA_ROOT),
+            "totalBytes": usage.total,
+            "freeBytes": usage.free,
+            "libraryBytes": stats["bytes"],
+        },
+        "library": {
+            "titles": len(items),
+            "videos": stats["videos"],
+            "seconds": stats["seconds"],
+            "pendingDurations": stats["pending"],
+        },
+        "battery": battery(),
+    }
+
+
+# ---------------------------------------------------------------- subida
+
+# Subir desde el panel evita pelearse con los permisos de Android: el servidor
+# escribe en SU carpeta de medios y nadie necesita acceso al resto del aparato.
+def safe_target(relative):
+    """Ruta destino dentro de media/, sin trucos: nada de .. ni rutas absolutas."""
+    parts = [p for p in unquote(relative).replace("\\", "/").split("/") if p not in ("", ".", "..")]
+    if not parts:
+        return None
+    target = Path(os.path.normpath(MEDIA_ROOT.joinpath(*parts)))
+    if MEDIA_ROOT not in target.parents:
+        return None
+    if target.suffix.lower() not in VIDEO_EXT | SUB_EXT | set(POSTER_EXT):
+        return None
+    return target
+
+
+def receive_upload(handler, target):
+    """Escribe el cuerpo de la petición en el archivo, por trozos."""
+    length = int(handler.headers.get("Content-Length") or 0)
+    if length <= 0:
+        return False, "archivo vacío"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = target.with_suffix(target.suffix + ".parte")
+    written = 0
+    try:
+        with open(partial, "wb") as f:
+            while written < length:
+                chunk = handler.rfile.read(min(CHUNK, length - written))
+                if not chunk:
+                    break
+                f.write(chunk)
+                written += len(chunk)
+        if written != length:
+            partial.unlink(missing_ok=True)
+            return False, "la subida se cortó"
+        partial.replace(target)  # solo aparece en la biblioteca cuando está completo
+        return True, str(target.relative_to(MEDIA_ROOT))
+    except OSError as error:
+        partial.unlink(missing_ok=True)
+        return False, str(error)
+
+
 # ---------------------------------------------------------------- paquete
 
 # "Quiero montar el servidor en la otra computadora": desde el panel se baja
@@ -494,6 +675,8 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(urlparse(self.path).query)
             profile_id = (query.get("profile") or [""])[0]
             return self.send_json({"items": progress_of(profile_id)})
+        if path == "/api/status":
+            return self.send_json(status())
         if path == "/api/jobs":
             with _jobs_lock:
                 return self.send_json({"jobs": list(JOBS.values()), "ffmpeg": ffmpeg_available()})
@@ -520,6 +703,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_bytes(b"not found", "text/plain", 404)
 
     do_HEAD = do_GET
+
+    def do_PUT(self):
+        path = self.path.split("?")[0]
+        if not path.startswith("/api/upload/"):
+            return self.send_bytes(b"not found", "text/plain", 404)
+        target = safe_target(path[len("/api/upload/"):])
+        if target is None:
+            return self.send_json({"error": "nombre o tipo de archivo no permitido"}, 400)
+        ok, detail = receive_upload(self, target)
+        return self.send_json({"ok": ok, "file": detail} if ok else {"error": detail}, 200 if ok else 400)
 
     def read_json(self):
         try:

@@ -2,7 +2,9 @@ package com.local.vod.presentation.setup
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.repository.ServerRepository
+import com.local.vod.domain.usecase.GetServerStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,11 +18,13 @@ data class SetupUiState(
     val testing: Boolean = false,
     val searching: Boolean = false,
     val error: String? = null,
+    val status: ServerStatus? = null,
 )
 
 @HiltViewModel
 class SetupViewModel @Inject constructor(
     private val server: ServerRepository,
+    private val getServerStatus: GetServerStatus,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SetupUiState())
@@ -30,7 +34,16 @@ class SetupViewModel @Inject constructor(
         viewModelScope.launch {
             server.baseUrl.first()?.let { saved ->
                 _state.update { it.copy(address = saved.removePrefix("http://")) }
+                loadStatus()
             }
+        }
+    }
+
+    fun loadStatus() {
+        viewModelScope.launch {
+            runCatching { getServerStatus() }
+                .onSuccess { status -> _state.update { it.copy(status = status) } }
+                .onFailure { _state.update { it.copy(status = null) } }
         }
     }
 
@@ -45,6 +58,7 @@ class SetupViewModel @Inject constructor(
             if (server.probe(url)) {
                 server.save(url)
                 _state.update { it.copy(testing = false) }
+                loadStatus()
                 onSaved()
             } else {
                 _state.update {
@@ -62,6 +76,7 @@ class SetupViewModel @Inject constructor(
             if (found != null) {
                 server.save(found)
                 _state.update { it.copy(searching = false, address = found.removePrefix("http://")) }
+                loadStatus()
                 onSaved()
             } else {
                 _state.update {

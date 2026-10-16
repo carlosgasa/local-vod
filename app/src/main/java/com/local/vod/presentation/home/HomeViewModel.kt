@@ -8,12 +8,14 @@ import com.local.vod.domain.repository.ProfileRepository
 import com.local.vod.domain.repository.ServerRepository
 import com.local.vod.domain.usecase.GetContinueWatching
 import com.local.vod.domain.usecase.GetLibrary
+import com.local.vod.domain.usecase.IsServerAlive
 import com.local.vod.domain.usecase.SyncProgress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -21,6 +23,8 @@ data class HomeUiState(
     val loading: Boolean = true,
     val needsSetup: Boolean = false,
     val needsProfile: Boolean = false,
+    /** El latido dejó de contestar: el servidor se apagó o se cayó la red. */
+    val serverDown: Boolean = false,
     val profileName: String? = null,
     val error: String? = null,
     val titles: List<Title> = emptyList(),
@@ -31,6 +35,7 @@ data class HomeUiState(
 class HomeViewModel @Inject constructor(
     private val getLibrary: GetLibrary,
     private val syncProgress: SyncProgress,
+    private val isServerAlive: IsServerAlive,
     getContinueWatching: GetContinueWatching,
     server: ServerRepository,
     profiles: ProfileRepository,
@@ -54,6 +59,17 @@ class HomeViewModel @Inject constructor(
             profiles.current.collect { profile ->
                 _state.update { it.copy(needsProfile = profile == null, profileName = profile?.name) }
                 if (profile != null) load(refresh = true)
+            }
+        }
+        // Latido: cada minuto se comprueba que el servidor siga en pie.
+        viewModelScope.launch {
+            while (true) {
+                delay(60_000)
+                if (_state.value.needsSetup) continue
+                val alive = isServerAlive()
+                val wasDown = _state.value.serverDown
+                _state.update { it.copy(serverDown = !alive) }
+                if (alive && wasDown) load(refresh = true) // volvió: se recarga solo
             }
         }
         viewModelScope.launch {

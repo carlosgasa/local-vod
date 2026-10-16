@@ -65,6 +65,21 @@
   </div>
 </div>
 
+<h2>Subir videos</h2>
+<div class="card">
+  <p class="small" style="margin:0 0 10px">
+    Para meter videos sin tocar la carpeta a mano: elige los archivos y se guardan en la carpeta de
+    medios de este servidor. Si escribes una carpeta, se crea (por ejemplo
+    <code>Breaking Bad/Temporada 01</code>).
+  </p>
+  <input type="text" id="uploadFolder" placeholder="Carpeta (opcional)" style="width:320px">
+  <input type="file" id="uploadFiles" multiple
+         accept=".mkv,.mp4,.m4v,.avi,.webm,.mov,.ts,.srt,.ass,.vtt,.jpg,.jpeg,.png,.webp"
+         style="display:none" onchange="uploadFiles(this.files)">
+  <button onclick="document.getElementById('uploadFiles').click()">Elegir archivos…</button>
+  <div id="uploads"></div>
+</div>
+
 <h2>Contenido detectado</h2>
 <div id="library"></div>
 
@@ -198,6 +213,40 @@ function empty() {
 function esc(s) { return s.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])); }
 
 async function openFolder() { await fetch('/api/open-folder', { method: 'POST' }); }
+
+function uploadFiles(files) {
+  const folder = $('uploadFolder').value.trim().replace(/^\/+|\/+$/g, '');
+  [...files].forEach(file => uploadOne(file, folder));
+}
+
+function uploadOne(file, folder) {
+  const row = document.createElement('div');
+  row.style.margin = '10px 0';
+  row.innerHTML = `<b>${esc(file.name)}</b> <span class="dim">· 0 %</span>
+                   <div class="bar"><div style="width:0%"></div></div>`;
+  $('uploads').appendChild(row);
+  const label = row.querySelector('span');
+  const bar = row.querySelector('.bar div');
+
+  const path = (folder ? folder + '/' : '') + file.name;
+  const request = new XMLHttpRequest();
+  request.open('PUT', '/api/upload/' + path.split('/').map(encodeURIComponent).join('/'));
+  request.upload.onprogress = e => {
+    if (!e.lengthComputable) return;
+    const percent = Math.round(e.loaded / e.total * 100);
+    label.textContent = `· ${percent} %`;
+    bar.style.width = percent + '%';
+  };
+  request.onload = () => {
+    const ok = request.status === 200;
+    label.textContent = ok ? '· listo' : '· error: ' + (JSON.parse(request.responseText).error || request.status);
+    label.className = ok ? 'dim' : 'warn';
+    bar.style.width = '100%';
+    if (ok) load();
+  };
+  request.onerror = () => { label.textContent = '· se cortó la subida'; label.className = 'warn'; };
+  request.send(file);
+}
 
 loadJobs().then(loadProfiles).then(load);
 </script>

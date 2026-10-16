@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -94,6 +95,26 @@ fun HomeScreen(
                 description = state.profileName?.let { "Perfil: $it" } ?: "Elegir perfil",
             )
         }
+        if (state.serverDown) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF3A2E12), RoundedCornerShape(10.dp))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "El servidor dejó de responder. Lo que ya está en pantalla sigue, pero no se podrá reproducir.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFF6C445),
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(12.dp))
+                TvButton(onClick = { viewModel.load(refresh = true) }, icon = R.drawable.ic_refresh, text = "Reintentar")
+            }
+        }
+
         Spacer(Modifier.height(16.dp))
 
         when {

@@ -1,7 +1,9 @@
 package com.local.vod.data.remote
 
 import com.local.vod.domain.model.PlaybackProgress
+import com.local.vod.domain.model.Battery
 import com.local.vod.domain.model.Profile
+import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.model.Title
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -45,6 +47,50 @@ private data class SaveProgressBody(
 @Serializable
 private data class NameBody(val name: String)
 
+@Serializable
+data class StatusResponse(
+    val host: HostDto = HostDto(),
+    val network: NetworkDto = NetworkDto(),
+    val storage: StorageDto = StorageDto(),
+    val library: LibraryStatsDto = LibraryStatsDto(),
+    val battery: BatteryDto? = null,
+)
+
+@Serializable
+data class HostDto(
+    val name: String = "",
+    val system: String = "",
+    val python: String = "",
+    val uptimeSeconds: Long? = null,
+    val temperature: Double? = null,
+)
+
+@Serializable
+data class NetworkDto(val ip: String = "", val port: Int = 0)
+
+@Serializable
+data class StorageDto(
+    val path: String = "",
+    val totalBytes: Long = 0,
+    val freeBytes: Long = 0,
+    val libraryBytes: Long = 0,
+)
+
+@Serializable
+data class LibraryStatsDto(
+    val titles: Int = 0,
+    val videos: Int = 0,
+    val seconds: Long = 0,
+    val pendingDurations: Int = 0,
+)
+
+@Serializable
+data class BatteryDto(
+    val percent: Int? = null,
+    val charging: Boolean = false,
+    val temperature: Double? = null,
+)
+
 @Singleton
 class VodApi @Inject constructor(
     private val client: OkHttpClient,
@@ -62,6 +108,26 @@ class VodApi @Inject constructor(
         post(baseUrl, "/api/profiles", json.encodeToString(NameBody(name))) { body ->
             json.decodeFromString<ProfileDto>(body).takeIf { it.id.isNotEmpty() }?.let { Profile(it.id, it.name) }
         }
+
+    suspend fun status(baseUrl: String): ServerStatus = get(baseUrl, "/api/status") { body ->
+        val dto = json.decodeFromString<StatusResponse>(body)
+        ServerStatus(
+            hostName = dto.host.name,
+            system = dto.host.system,
+            uptimeSeconds = dto.host.uptimeSeconds,
+            cpuTemperature = dto.host.temperature,
+            ip = dto.network.ip,
+            port = dto.network.port,
+            totalBytes = dto.storage.totalBytes,
+            freeBytes = dto.storage.freeBytes,
+            libraryBytes = dto.storage.libraryBytes,
+            titles = dto.library.titles,
+            videos = dto.library.videos,
+            librarySeconds = dto.library.seconds,
+            pendingDurations = dto.library.pendingDurations,
+            battery = dto.battery?.let { Battery(it.percent, it.charging, it.temperature) },
+        )
+    }
 
     suspend fun progress(baseUrl: String, profileId: String): List<PlaybackProgress> =
         get(baseUrl, "/api/progress?profile=$profileId") { body ->

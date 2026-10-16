@@ -16,6 +16,10 @@ Compose, Media3 y clean architecture.
 - Aviso de **siguiente episodio** con cuenta atrás y opción de cancelar.
 - **Convertir a MP4** desde el panel para archivos que el aparato no decodifica.
 - La app **encuentra el servidor sola** en la red si le cambia la IP a la PC.
+- **Subir videos desde el panel**, sin tocar carpetas ni permisos de Android.
+- **Estado del servidor en la app**: espacio libre, tamaño y duración de la biblioteca y, si el
+  servidor es un celular, batería y temperatura. Comprueba cada minuto que siga vivo y avisa.
+- Corre igual en una PC Linux, en Windows o en un **celular viejo con Termux**.
 
 ## Manual
 

@@ -4,10 +4,12 @@ import com.local.vod.domain.model.ContinueItem
 import com.local.vod.domain.model.Episode
 import com.local.vod.domain.model.Playlist
 import com.local.vod.domain.model.Profile
+import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.domain.model.Title
 import com.local.vod.domain.repository.LibraryRepository
 import com.local.vod.domain.repository.ProfileRepository
+import com.local.vod.domain.repository.ServerRepository
 import com.local.vod.domain.repository.ProgressRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -100,4 +102,14 @@ class NextToWatch @Inject constructor() {
         }
         return pending?.let { it to 0L }
     }
+}
+
+
+class GetServerStatus @Inject constructor(private val server: ServerRepository) {
+    suspend operator fun invoke(): ServerStatus = server.status()
+}
+
+/** Para el latido: ¿sigue ahí el servidor? */
+class IsServerAlive @Inject constructor(private val server: ServerRepository) {
+    suspend operator fun invoke(): Boolean = server.isAlive()
 }
