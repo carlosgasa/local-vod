@@ -2,14 +2,53 @@
 """Self-check del servidor: `python3 test_server.py`. Sin frameworks."""
 
 import json
+import io
 import tempfile
 import threading
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 import server
+
+
+def start_http():
+    """Usa TCP local si está permitido; si no, ejercita el handler en memoria."""
+    try:
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+    except PermissionError:
+        def local_open(request):
+            if isinstance(request, str):
+                request = urllib.request.Request(request)
+            handler = server.Handler.__new__(server.Handler)
+            handler.path = urlsplit(request.full_url).path
+            if urlsplit(request.full_url).query:
+                handler.path += "?" + urlsplit(request.full_url).query
+            handler.command = request.get_method()
+            handler.headers = dict(request.headers)
+            if request.data is not None:
+                handler.headers["Content-Length"] = str(len(request.data))
+            handler.rfile = io.BytesIO(request.data or b"")
+            handler.wfile = io.BytesIO()
+            handler.response_headers = {}
+            handler.send_response = lambda status: setattr(handler, "response_status", status)
+            handler.send_header = lambda key, value: handler.response_headers.__setitem__(key, value)
+            handler.end_headers = lambda: None
+            getattr(handler, "do_" + handler.command)()
+            body = handler.wfile.getvalue()
+            if handler.response_status >= 400:
+                raise urllib.error.HTTPError(request.full_url, handler.response_status, "error", handler.response_headers, io.BytesIO(body))
+            result = io.BytesIO(body)
+            result.status = handler.response_status
+            result.headers = handler.response_headers
+            return result
+        urllib.request.urlopen = local_open
+        return None, "http://127.0.0.1"
+    srv.daemon_threads = True
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, "http://127.0.0.1:%d" % srv.server_address[1]
 
 
 def build_tree(root):
@@ -45,6 +84,10 @@ def test_scan(root):
     assert movie["type"] == "movie", movie
     assert movie["poster"] == "/media/Dune%20%282021%29/poster.jpg", movie["poster"]
     assert movie["seasons"][0]["episodes"][0]["url"] == "/media/Dune%20%282021%29/Dune.mkv"
+    episode = movie["seasons"][0]["episodes"][0]
+    assert episode["durationSeconds"] == 123 and episode["addedAt"] == movie["addedAt"]
+    assert episode["addedAt"] == int((root / "Dune (2021)" / "Dune.mkv").stat().st_mtime * 1000)
+    assert episode["thumb"].startswith("/thumb/")
 
     serie = items["Breaking Bad"]
     assert serie["type"] == "series"
@@ -55,6 +98,8 @@ def test_scan(root):
     assert s1[0]["id"] == "Breaking Bad/Temporada 01/S01E01 - Ep.mkv", s1[0]["id"]
     assert [sub["lang"] for sub in s1[0]["subs"]] == ["es"], s1[0]["subs"]
     assert s1[1]["subs"] == []
+    assert s1[0]["durationSeconds"] is None
+    assert serie["addedAt"] == max(e["addedAt"] for s in serie["seasons"] for e in s["episodes"])
 
     cortos = items["Cortos"]
     assert cortos["type"] == "series"  # varios videos sueltos
@@ -66,10 +111,7 @@ def test_scan(root):
 
 def test_http(root):
     server.MEDIA_ROOT = root
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    srv.daemon_threads = True
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    base = "http://127.0.0.1:%d" % srv.server_address[1]
+    srv, base = start_http()
 
     def get(path, headers={}):
         return urllib.request.urlopen(urllib.request.Request(base + path, headers=headers))
@@ -106,8 +148,20 @@ def test_http(root):
 
     lib = get("/api/library")
     assert lib.headers["Content-Type"].startswith("application/json")
+    payload = json.loads(lib.read())
+    assert all("addedAt" in i for i in payload["items"])
+    assert all("durationSeconds" in e and "thumb" in e and "addedAt" in e
+               for i in payload["items"] for s in i["seasons"] for e in s["episodes"])
+    thumb = next(i for i in payload["items"] if i["id"] == "Dune (2021)")["seasons"][0]["episodes"][0]["thumb"]
+    assert get(thumb).read() == b"jpg"
+    try:
+        get("/thumb/..%2F..%2Fstate.json")
+        assert False, "miniatura fuera de la carpeta"
+    except urllib.error.HTTPError as e:
+        assert e.code == 403
     assert get("/").read().startswith(b"<!DOCTYPE html>")
-    srv.shutdown()
+    if srv:
+        srv.shutdown()
     print("http OK")
 
 
@@ -145,10 +199,7 @@ def test_state(tmp):
 def test_state_http(tmp, root):
     server.STATE_FILE = Path(tmp) / "state_http.json"
     server.MEDIA_ROOT = root
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
-    srv.daemon_threads = True
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    base = "http://127.0.0.1:%d" % srv.server_address[1]
+    srv, base = start_http()
 
     def post(path, payload):
         request = urllib.request.Request(
@@ -196,7 +247,39 @@ def test_state_http(tmp, root):
     except urllib.error.HTTPError as e:
         assert e.code == 403, e.code
 
-    srv.shutdown()
+    def rejects(path, payload, code):
+        try:
+            post(path, payload)
+            assert False, (path, payload)
+        except urllib.error.HTTPError as e:
+            assert e.code == code, (path, payload, e.code)
+
+    # Las dos copias de Cortos tienen exactamente el mismo tamaño.
+    groups = get("/api/duplicates")["groups"]
+    assert any(g["reason"] == "mismo tamaño" and
+               {"Cortos/corto 2.mp4", "Cortos/corto 10.mp4"} <= {f["id"] for f in g["files"]}
+               for g in groups), groups
+    rejects("/api/rename", {"id": "Cortos", "name": "Mala/Carpeta"}, 400)
+    rejects("/api/rename", {"id": "Cortos", "name": "..mala"}, 400)
+    rejects("/api/rename", {"id": "Cortos", "name": "Breaking Bad"}, 409)
+    assert post("/api/rename", {"id": "Cortos", "name": "Cortos nuevos"})["id"] == "Cortos nuevos"
+    assert (root / "Cortos nuevos").is_dir() and not (root / "Cortos").exists()
+    rejects("/api/delete", {"id": "../fuera"}, 403)
+    rejects("/api/delete", {"id": str(root.parent / "fuera")}, 403)
+    with tempfile.TemporaryDirectory() as outside:
+        external = Path(outside)
+        (external / "archivo.mkv").write_bytes(b"intacto")
+        (root / "enlace").symlink_to(external, target_is_directory=True)
+        rejects("/api/delete", {"id": "enlace/archivo.mkv"}, 403)
+        assert (external / "archivo.mkv").read_bytes() == b"intacto"
+        (root / "enlace").unlink()
+    assert post("/api/delete", {"id": "Cortos nuevos/corto 2.mp4"})["ok"]
+    assert not (root / "Cortos nuevos" / "corto 2.mp4").exists()
+    assert post("/api/delete", {"id": "Cortos nuevos"})["ok"]
+    assert "Cortos nuevos" not in {i["id"] for i in get("/api/library")["items"]}
+
+    if srv:
+        srv.shutdown()
     print("estado por http OK")
 
 
@@ -204,6 +287,13 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         build_tree(root)
+        server.MEDIA_ROOT = root
+        server.STATE_FILE = root / "state.json"
+        server.DURATIONS_FILE = root / "durations.json"
+        server.DURATIONS_FILE.write_text(json.dumps({"Dune (2021)/Dune.mkv:2048": 123.9}))
+        thumb = server.thumb_path(root / "Dune (2021)" / "Dune.mkv", 2048)
+        thumb.parent.mkdir(parents=True)
+        thumb.write_bytes(b"jpg")
         test_scan(root)
         test_http(root)
         test_state(tmp)

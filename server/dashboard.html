@@ -83,6 +83,9 @@
 <h2>Contenido detectado</h2>
 <div id="library"></div>
 
+<h2>Archivos repetidos</h2>
+<div class="card" id="duplicates"></div>
+
 <h2>Conversiones</h2>
 <div class="card" id="jobs"></div>
 
@@ -110,6 +113,7 @@ async function load() {
   $('mediaRoot').textContent = server.mediaRoot;
   $('status').textContent = `${items.length} títulos · ${server.episodes} videos · puerto ${server.port}`;
   $('library').innerHTML = items.length ? table(items) : empty();
+  loadDuplicates();
   $('apk').innerHTML = server.apk
     ? `Abre la app <b>Downloader</b> en el Fire TV y escribe:<div class="url">${base}/app.apk</div>`
     : `<span class="warn">Todavía no hay APK compilada.</span>
@@ -127,8 +131,11 @@ function table(items) {
     const warn = it.poster ? '' : `<div class="warn">falta carátula (poster.jpg)</div>`;
     const files = hasFfmpeg ? episodes.map(e => `
         <div class="file"><span class="dim">${esc(e.title)}</span>
-        <button onclick="convert('${esc(e.id).replace(/'/g, "\\'")}')">Convertir a MP4</button></div>`).join('') : '';
-    return `<tr><td>${poster}</td><td><b>${esc(it.title)}</b>${warn}</td>
+        <button data-id="${esc(encodeURIComponent(e.id))}" onclick="convert(decodeURIComponent(this.dataset.id))">Convertir a MP4</button></div>`).join('') : '';
+    const id = esc(encodeURIComponent(it.id));
+    return `<tr><td>${poster}</td><td><b>${esc(it.title)}</b>${warn}
+            <div><button data-id="${id}" onclick="renameTitle(decodeURIComponent(this.dataset.id))">Renombrar</button>
+            <button data-id="${id}" onclick="deleteItem(decodeURIComponent(this.dataset.id))">Borrar</button></div></td>
             <td class="dim">${kind}</td><td class="dim">${episodes.length} video${episodes.length > 1 ? 's' : ''}</td></tr>
             ${files ? `<tr><td></td><td class="files" colspan="3">${files}</td></tr>` : ''}`;
   }).join('');
@@ -142,8 +149,8 @@ async function loadProfiles() {
   const { profiles } = await (await fetch('/api/profiles')).json();
   $('profiles').innerHTML = profiles.map(p => `
     <span class="chip">${esc(p.name)}
-      <button onclick="renameProfile('${p.id}', '${esc(p.name).replace(/'/g, "\\'")}')">Renombrar</button>
-      <button onclick="deleteProfile('${p.id}', '${esc(p.name).replace(/'/g, "\\'")}')">Borrar</button>
+      <button data-id="${esc(p.id)}" data-name="${esc(p.name)}" onclick="renameProfile(this.dataset.id, this.dataset.name)">Renombrar</button>
+      <button data-id="${esc(p.id)}" data-name="${esc(p.name)}" onclick="deleteProfile(this.dataset.id, this.dataset.name)">Borrar</button>
     </span>`).join('');
 }
 
@@ -210,7 +217,38 @@ function empty() {
     (.jpg/.png/.webp).</div>`;
 }
 
-function esc(s) { return s.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])); }
+function esc(s) { return String(s).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+async function changeMedia(path, body) {
+  const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!response.ok) {
+    const detail = await response.json();
+    alert(detail.error || 'No se pudo completar la operación');
+    return false;
+  }
+  await load();
+  return true;
+}
+
+async function renameTitle(id) {
+  const name = prompt('Nuevo nombre del título', id);
+  if (name === null || !name.trim()) return;
+  await changeMedia('/api/rename', { id, name });
+}
+
+async function deleteItem(id) {
+  if (!confirm(`¿Borrar «${id}»? Se borrarán los archivos de forma permanente.`)) return;
+  await changeMedia('/api/delete', { id });
+}
+
+async function loadDuplicates() {
+  const { groups } = await (await fetch('/api/duplicates')).json();
+  $('duplicates').innerHTML = groups.length ? groups.map(group => `
+    <div style="margin:8px 0"><b>${esc(group.reason)}</b>
+    ${group.files.map(file => `<div class="file"><span>${esc(file.id)} <span class="dim">· ${file.bytes} bytes</span></span>
+      <button data-id="${esc(encodeURIComponent(file.id))}" onclick="deleteItem(decodeURIComponent(this.dataset.id))">Borrar sobrante</button></div>`).join('')}</div>`).join('')
+    : '<span class="dim">No se detectaron archivos repetidos.</span>';
+}
 
 async function openFolder() { await fetch('/api/open-folder', { method: 'POST' }); }
 

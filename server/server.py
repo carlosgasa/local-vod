@@ -6,6 +6,7 @@ Config por variables de entorno: VOD_MEDIA (carpeta), VOD_PORT (puerto).
 """
 
 import json
+import hashlib
 import mimetypes
 import os
 import re
@@ -273,9 +274,19 @@ def parse_episode(name):
     return int(s), int(e)
 
 
-def episode_of(video, default_season):
+def thumb_path(video, size):
+    key = f"{video.relative_to(MEDIA_ROOT)}:{size}"
+    name = hashlib.sha256(key.encode()).hexdigest() + ".jpg"
+    return STATE_FILE.parent / "thumbs" / name
+
+
+def episode_of(video, default_season, durations):
     season, number = parse_episode(video.name)
     remote = read_link_file(video) if video.suffix.lower() in LINK_EXT else None
+    stat = video.stat()
+    key = f"{video.relative_to(MEDIA_ROOT)}:{stat.st_size}"
+    # un enlace no tiene fotograma que sacar: su "archivo" son cuatro letras
+    thumb = None if remote else thumb_path(video, stat.st_size)
     return {
         "id": str(video.relative_to(MEDIA_ROOT)),
         "title": video.stem,
@@ -284,17 +295,21 @@ def episode_of(video, default_season):
         "url": remote or media_url(video),
         "remote": bool(remote),
         "subs": find_subs(video),
+        "durationSeconds": int(durations[key]) if key in durations else None,
+        "addedAt": int(stat.st_mtime * 1000),
+        "thumb": "/thumb/" + thumb.name if thumb and thumb.is_file() else None,
     }
 
 
-def scan_title(folder):
+def scan_title(folder, durations=None):
     """Una carpeta de primer nivel = una película o una serie."""
-    episodes = [episode_of(v, 1) for v in videos_in(folder)]
+    durations = durations if durations is not None else load_durations()
+    episodes = [episode_of(v, 1, durations) for v in videos_in(folder)]
     season_dirs = [d for d in sorted(folder.iterdir(), key=natkey) if d.is_dir() and videos_in(d)]
     for i, sub in enumerate(season_dirs, start=1):
         m = SEASON_RE.search(sub.name)
         default = int(m.group(1)) if m else i
-        episodes += [episode_of(v, default) for v in videos_in(sub)]
+        episodes += [episode_of(v, default, durations) for v in videos_in(sub)]
     if not episodes:
         return None
 
@@ -310,6 +325,7 @@ def scan_title(folder):
         "title": folder.name,
         "type": "movie" if is_movie else "series",
         "poster": find_poster(folder),
+        "addedAt": max(ep["addedAt"] for ep in episodes),
         "seasons": [{"number": n, "episodes": seasons[n]} for n in sorted(seasons)],
     }
 
@@ -318,28 +334,31 @@ def scan():
     if not MEDIA_ROOT.is_dir():
         return []
     items = []
+    durations = load_durations()
     for d in sorted(MEDIA_ROOT.iterdir(), key=natkey):
         if not d.is_dir() or d.name.startswith("."):
             continue
-        item = scan_title(d)
+        item = scan_title(d, durations)
         if item:
             items.append(item)
     return items
 
 
 def lan_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))  # no envía nada, solo elige la interfaz de salida
         return s.getsockname()[0]
     except OSError:
         return "127.0.0.1"
     finally:
-        s.close()
+        if "s" in locals():
+            s.close()
 
 
 def library():
     items = scan() + link_items()
+    start_media_scans(video_files())
     return {
         "items": items,
         "server": {
@@ -449,6 +468,7 @@ DURATIONS_FILE = STATE_FILE.parent / "durations.json"
 LINKS_FILE = STATE_FILE.parent / "links.json"
 _durations_lock = threading.Lock()
 _scanning_durations = False
+_scanning_thumbs = False
 
 
 def battery():
@@ -497,6 +517,7 @@ def uptime_seconds():
 
 
 def video_files():
+    # los enlaces no son archivos de vídeo: ni duración ni miniatura
     if not MEDIA_ROOT.is_dir():
         return []
     return [p for p in MEDIA_ROOT.rglob("*") if p.is_file() and p.suffix.lower() in VIDEO_EXT]
@@ -515,15 +536,64 @@ def measure_durations(files):
     cache = load_durations()
     try:
         for path in files:
-            key = f"{path.relative_to(MEDIA_ROOT)}:{path.stat().st_size}"
+            try:
+                key = f"{path.relative_to(MEDIA_ROOT)}:{path.stat().st_size}"
+            except OSError:
+                continue
             if key in cache:
                 continue
             cache[key] = probe_duration(path)
             with _durations_lock:
                 DURATIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
-                DURATIONS_FILE.write_text(json.dumps(cache))
+                tmp = DURATIONS_FILE.with_suffix(".tmp")
+                tmp.write_text(json.dumps(cache))
+                tmp.replace(DURATIONS_FILE)
     finally:
         _scanning_durations = False
+
+
+def generate_thumbs(files):
+    """Crea una miniatura por vídeo sin retrasar la respuesta HTTP."""
+    global _scanning_thumbs
+    try:
+        for path in files:
+            try:
+                target = thumb_path(path, path.stat().st_size)
+                if target.is_file():
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                partial = target.with_suffix(".tmp.jpg")
+                seconds = probe_duration(path)
+                result = subprocess.run(
+                    ["ffmpeg", "-nostdin", "-y", "-ss", str(seconds * 0.1),
+                     "-i", str(path), "-frames:v", "1", "-vf", "scale=480:-2",
+                     str(partial)], capture_output=True, timeout=90,
+                )
+                if result.returncode == 0 and partial.is_file():
+                    partial.replace(target)
+                else:
+                    partial.unlink(missing_ok=True)
+            except (OSError, subprocess.SubprocessError):
+                continue
+    finally:
+        _scanning_thumbs = False
+
+
+def start_media_scans(files):
+    global _scanning_durations, _scanning_thumbs
+    if not files or not ffmpeg_available():
+        return
+    cache = load_durations()
+    if not _scanning_durations and any(
+        f"{p.relative_to(MEDIA_ROOT)}:{p.stat().st_size}" not in cache for p in files
+    ):
+        _scanning_durations = True
+        threading.Thread(target=measure_durations, args=(files,), daemon=True).start()
+    if not _scanning_thumbs and any(
+        not thumb_path(p, p.stat().st_size).is_file() for p in files
+    ):
+        _scanning_thumbs = True
+        threading.Thread(target=generate_thumbs, args=(files,), daemon=True).start()
 
 
 def library_stats():
@@ -541,9 +611,7 @@ def library_stats():
             missing += 1
 
     # lo que falte se mide en segundo plano: el panel no se queda esperando a ffprobe
-    if missing and ffmpeg_available() and not _scanning_durations:
-        _scanning_durations = True
-        threading.Thread(target=measure_durations, args=(files,), daemon=True).start()
+    start_media_scans(files)
 
     return {
         "videos": len(files),
@@ -623,6 +691,83 @@ def receive_upload(handler, target):
     except OSError as error:
         partial.unlink(missing_ok=True)
         return False, str(error)
+
+
+def managed_path(identifier):
+    """Acepta un elemento dentro de media/, nunca su raíz ni un enlace externo."""
+    if not isinstance(identifier, str) or not identifier or "\\" in identifier:
+        return None
+    relative = Path(identifier)
+    if relative.is_absolute() or any(p in ("", ".", "..") for p in relative.parts):
+        return None
+    root = MEDIA_ROOT.resolve()
+    target = (MEDIA_ROOT / relative).resolve()
+    if root not in target.parents:
+        return None
+    return MEDIA_ROOT / relative
+
+
+def rename_title(identifier, name):
+    if not isinstance(name, str) or not name.strip() or "/" in name or "\\" in name or ".." in name:
+        return None, 400
+    name = name.strip()
+    source = managed_path(identifier)
+    if source is None or len(Path(identifier).parts) != 1:
+        return None, 403
+    if not source.is_dir() or source.is_symlink():
+        return None, 404
+    target = managed_path(name)
+    if target is None or len(Path(name).parts) != 1:
+        return None, 400
+    if os.path.lexists(target):
+        return None, 409
+    try:
+        source.rename(target)
+    except OSError:
+        return None, 400
+    return {"ok": True, "id": name}, 200
+
+
+def delete_media(identifier):
+    target = managed_path(identifier)
+    if target is None:
+        return None, 403
+    if not target.exists():
+        return None, 404
+    if target.is_dir() and len(Path(identifier).parts) != 1:
+        return None, 400
+    if not target.is_dir() and not target.is_file():
+        return None, 400
+    try:
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+    except OSError:
+        return None, 400
+    return {"ok": True}, 200
+
+
+def duplicates():
+    files = video_files()
+    rows = [{"id": str(p.relative_to(MEDIA_ROOT)), "bytes": p.stat().st_size} for p in files]
+    converted = {}
+    for row in rows:
+        path = Path(row["id"])
+        stem = re.sub(r" \(convertido\)$", "", path.stem, flags=re.I)
+        converted.setdefault((str(path.parent), stem.lower()), []).append(row)
+    groups, used = [], set()
+    for members in converted.values():
+        if len(members) > 1 and any(Path(r["id"]).stem.lower().endswith(" (convertido)") for r in members):
+            groups.append({"reason": "convertido", "files": members})
+            used.update(r["id"] for r in members)
+    sizes = {}
+    for row in rows:
+        if row["id"] not in used:
+            sizes.setdefault(row["bytes"], []).append(row)
+    groups += [{"reason": "mismo tamaño", "files": members}
+               for members in sizes.values() if len(members) > 1]
+    return {"groups": groups}
 
 
 # ---------------------------------------------------------------- paquete
@@ -764,6 +909,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_bytes(DASHBOARD.read_bytes(), "text/html; charset=utf-8")
         if path == "/api/library":
             return self.send_json(library())
+        if path == "/api/duplicates":
+            return self.send_json(duplicates())
         if path == "/api/profiles":
             return self.send_json({"profiles": profiles()})
         if path == "/api/links":
@@ -797,6 +944,15 @@ class Handler(BaseHTTPRequestHandler):
             if not p.is_file():
                 return self.send_bytes(b"not found", "text/plain", 404)
             return self.send_file(p)
+        if path.startswith("/thumb/"):
+            name = unquote(path[len("/thumb/"):])
+            root = STATE_FILE.parent / "thumbs"
+            thumb = (root / name).resolve()
+            if root.resolve() not in thumb.parents or not re.fullmatch(r"[0-9a-f]{64}\.jpg", name):
+                return self.send_bytes(b"fuera de la carpeta de miniaturas", "text/plain", 403)
+            if not thumb.is_file():
+                return self.send_bytes(b"not found", "text/plain", 404)
+            return self.send_file(thumb)
         self.send_bytes(b"not found", "text/plain", 404)
 
     do_HEAD = do_GET
@@ -826,6 +982,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": True})
 
         body = self.read_json()
+
+        if path == "/api/rename":
+            result, code = rename_title(body.get("id"), body.get("name"))
+            return self.send_json(result or {"error": "nombre o título no permitido"}, code)
+        if path == "/api/delete":
+            result, code = delete_media(body.get("id"))
+            return self.send_json(result or {"error": "archivo o título no permitido"}, code)
 
         if path == "/api/profiles":
             profile = add_profile(body.get("name"))
