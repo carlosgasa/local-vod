@@ -1,5 +1,7 @@
 # Local VOD
 
+[![Instalación en un paso](https://img.shields.io/badge/instalar-en%20un%20paso-4da3ff)](#instalar-desde-github)
+
 Ver los videos de la PC en el Fire TV, en la red local. Sin usuarios, sin nube, sin terminal:
 un servidor en Python (solo stdlib) con panel web, y una app de Android TV hecha con Kotlin,
 Compose, Media3 y clean architecture.
@@ -30,10 +32,39 @@ El servidor ya queda instalado como servicio del usuario: arranca con la sesión
   aparato no aguante (usa el ffmpeg del sistema; deja el original y crea una copia al lado).
 - Dirección para la app: la que muestra el panel (ej. `http://192.168.1.100:8000`).
 
-### Montarlo en otra computadora
+### Instalar desde GitHub
 
-Desde el panel, **Descargar el paquete del servidor (zip)**: trae el servidor, el panel, el manual
-y los instaladores. Después, en esa máquina:
+En la computadora que vaya a hacer de servidor (necesita **Python 3**):
+
+**Linux con escritorio** — deja el icono «Local VOD» y arranque con la sesión:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/carlosgasa/local-vod/main/desktop/get.sh | bash
+```
+
+**Máquina sin pantalla** (mini PC, thin client, Raspberry Pi, PC vieja) — servicio del sistema,
+indicando dónde están los videos:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/carlosgasa/local-vod/main/desktop/get.sh | bash -s -- /mnt/videos
+```
+
+**Windows** — descarga
+[`instalar-desde-github.bat`](https://raw.githubusercontent.com/carlosgasa/local-vod/main/desktop/instalar-desde-github.bat)
+y haz doble clic: baja el proyecto, deja el servidor arrancando con la sesión, crea el acceso
+directo al panel y abre el puerto 8000 en el cortafuegos.
+
+> Instala Python desde [python.org](https://www.python.org/downloads/windows/) marcando
+> **«Add python.exe to PATH»** antes de ejecutarlo.
+
+Después, en todos los casos: copia tus carpetas de videos en `media/`, abre
+<http://localhost:8000> y sigue el [manual](#manual).
+
+### Montarlo desde el panel (sin internet)
+
+Si la otra computadora no tiene internet, desde el panel de esta: **Descargar el paquete del
+servidor (zip)**, que trae el servidor, el panel, el manual y los instaladores. Después, en esa
+máquina:
 
 | Dónde | Qué ejecutar |
 |---|---|
@@ -98,6 +129,11 @@ aviso **Siguiente episodio** con *Ver ahora* y *Cancelar* (cancelar vacía la co
 terminar ese episodio no salta a ninguno). El episodio que se deja atrás queda marcado como visto.
 
 Recompilar la app: `./build-apk.sh` (deja la APK nueva en `dist/app.apk`, lista para Downloader).
+
+La APK no se sube al repo (pesa 16 MB y cambia en cada compilación). Para compartirla públicamente,
+publícala como *Release* en GitHub: en la página del repo, **Releases → Draft a new release**,
+arrastra `dist/app.apk` y publica. Desde el Fire TV se instala igual, con Downloader apuntando al
+enlace de la release.
 
 ## Estructura
 
