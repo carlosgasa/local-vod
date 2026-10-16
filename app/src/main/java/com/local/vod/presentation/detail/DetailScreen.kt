@@ -41,6 +41,7 @@ import com.local.vod.R
 import com.local.vod.domain.model.Episode
 import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.domain.usecase.MarkWatched
+import com.local.vod.presentation.formatDuration
 import com.local.vod.presentation.formatTime
 import com.local.vod.presentation.neonBackground
 import com.local.vod.presentation.screenPadding
@@ -251,51 +252,67 @@ private fun WatchedButton(episode: Episode, progress: PlaybackProgress?, onClick
 @Composable
 private fun EpisodeCard(episode: Episode, progress: PlaybackProgress?, modifier: Modifier, onClick: () -> Unit) {
     TvCard(onClick = onClick, modifier = modifier) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    episode.number?.let { "%02d".format(it) } ?: "–",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.width(16.dp))
-                Text(
-                    episode.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (episode.subs.isNotEmpty()) {
-                    Spacer(Modifier.width(12.dp))
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Los enlaces remotos no tienen miniatura: sin ella la fila sigue siendo solo texto.
+            if (episode.thumbUrl != null) {
+                Poster(episode.thumbUrl, episode.name, Modifier.width(112.dp).aspectRatio(16f / 9f))
+                Spacer(Modifier.width(12.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "SUB " + episode.subs.joinToString("/") { it.lang },
+                        episode.number?.let { "%02d".format(it) } ?: "\u2013",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        episode.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (episode.subs.isNotEmpty()) {
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            "SUB " + episode.subs.joinToString("/") { it.lang },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        )
+                    }
+                }
+                if (episode.durationSeconds != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        formatDuration(episode.durationSeconds),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
                 }
-            }
-            // menos de 10 s no es "visto": no se pinta barra ni texto
-            if (progress != null && progress.positionMs > 10_000) {
-                Spacer(Modifier.height(8.dp))
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(4.dp)
-                        .background(Color(0xFF2B3039)),
-                ) {
+                // menos de 10 s no es "visto": no se pinta barra ni texto
+                if (progress != null && progress.positionMs > 10_000) {
+                    Spacer(Modifier.height(8.dp))
                     Box(
                         Modifier
-                            .fillMaxWidth(progress.fraction)
+                            .fillMaxWidth()
                             .height(4.dp)
-                            .background(MaterialTheme.colorScheme.primary),
+                            .background(Color(0xFF2B3039)),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(progress.fraction)
+                                .height(4.dp)
+                                .background(MaterialTheme.colorScheme.primary),
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (progress.fraction >= 0.95f) "\u2713 Visto" else "Visto hasta ${formatTime(progress.positionMs)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
                 }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    if (progress.fraction >= 0.95f) "✓ Visto" else "Visto hasta ${formatTime(progress.positionMs)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
             }
         }
     }

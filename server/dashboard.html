@@ -80,6 +80,22 @@
   <div id="uploads"></div>
 </div>
 
+<h2>Enlaces remotos</h2>
+<div class="card">
+  <p class="small" style="margin:0 0 10px">
+    Para videos libres que viven en internet (una dirección que acabe en <code>.mp4</code>,
+    <code>.webm</code>…). No descarga nada: la app abre la dirección tal cual. La otra forma es
+    dejar un archivo <code>.url</code> con la dirección dentro de la carpeta de medios.
+  </p>
+  <div>
+    <input type="text" id="linkTitle" placeholder="Título" maxlength="120">
+    <input type="text" id="linkUrl" placeholder="https://…/video.mp4" style="width:360px">
+    <input type="text" id="linkPoster" placeholder="Carátula (opcional)" style="width:280px">
+    <button onclick="addLink()">Añadir enlace</button>
+  </div>
+  <div id="links" style="margin-top:12px"></div>
+</div>
+
 <h2>Contenido detectado</h2>
 <div id="library"></div>
 
@@ -250,6 +266,30 @@ async function loadDuplicates() {
     : '<span class="dim">No se detectaron archivos repetidos.</span>';
 }
 
+async function loadLinks() {
+  const { links } = await (await fetch('/api/links')).json();
+  $('links').innerHTML = links.length ? links.map(l => `
+    <div class="file"><span>${esc(l.title || l.url)} <span class="dim">· ${esc(l.url)}</span></span>
+      <button data-url="${esc(encodeURIComponent(l.url))}" onclick="deleteLink(decodeURIComponent(this.dataset.url))">Quitar</button>
+    </div>`).join('') : '<span class="dim">Sin enlaces. El contenido de la carpeta de medios no se toca.</span>';
+}
+
+async function addLink() {
+  const url = $('linkUrl').value.trim();
+  if (!url) return;
+  const body = { url, title: $('linkTitle').value.trim(), poster: $('linkPoster').value.trim() };
+  const response = await fetch('/api/links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!response.ok) { alert((await response.json()).error || 'No se pudo añadir'); return; }
+  $('linkTitle').value = $('linkUrl').value = $('linkPoster').value = '';
+  loadLinks(); load();
+}
+
+async function deleteLink(url) {
+  if (!confirm(`¿Quitar el enlace «${url}»?`)) return;
+  await fetch('/api/links/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+  loadLinks(); load();
+}
+
 async function openFolder() { await fetch('/api/open-folder', { method: 'POST' }); }
 
 function uploadFiles(files) {
@@ -286,7 +326,7 @@ function uploadOne(file, folder) {
   request.send(file);
 }
 
-loadJobs().then(loadProfiles).then(load);
+loadJobs().then(loadProfiles).then(loadLinks).then(load);
 </script>
 </body>
 </html>
