@@ -278,20 +278,55 @@ def test_state_http(tmp, root):
     assert len(items) == 1 and items[0]["positionMs"] == 5_000, items
     assert get("/api/progress?profile=otro")["items"] == []
 
-    # subida: entra en media/, respeta subcarpetas y rechaza lo que no toca
+    # subida: cada archivo cae solo en su categoría y rechaza lo que no toca
     def put(path, data):
         request = urllib.request.Request(base + path, data=data, method="PUT")
         return json.loads(urllib.request.urlopen(request).read())
 
+    for name, expected in (("Dune.mkv", "Películas/Dune.mkv"),
+                           ("Lost%20S01E02.mkv", "Series/Lost S01E02.mkv"),
+                           ("Lost%20S01E02.es.srt", "Series/Lost S01E02.es.srt"),
+                           ("foto.jpg", "Imágenes/foto.jpg"),
+                           ("canci%C3%B3n.mp3", "Música/canción.mp3")):
+        assert put("/api/upload/" + name, b"dato")["file"] == expected, name
+        assert (root / expected).read_bytes() == b"dato"
+    # versiones viejas de la app mandan carpeta: va dentro de la categoría
     assert put("/api/upload/Nueva%20Serie/T01/ep1.mkv", b"video!")["ok"]
-    assert (root / "Nueva Serie" / "T01" / "ep1.mkv").read_bytes() == b"video!"
-    assert put("/api/upload/M%C3%BAsica/canci%C3%B3n.mp3", b"audio!")["ok"]
-    assert (root / "Música" / "canción.mp3").read_bytes() == b"audio!"
+    assert (root / "Películas" / "Nueva Serie" / "T01" / "ep1.mkv").read_bytes() == b"video!"
+    # y la carátula sigue a su carpeta en vez de irse a Imágenes
+    assert put("/api/upload/Nueva%20Serie/poster.jpg", b"jpg")["file"] == "Películas/Nueva Serie/poster.jpg"
+    assert put("/api/upload/M%C3%BAsica/Disco/canci%C3%B3n.mp3", b"audio!")["ok"]
+    assert (root / "Música" / "Disco" / "canción.mp3").read_bytes() == b"audio!"
     assert not list(root.rglob("*.parte")), "no deben quedar archivos a medias"
+
+    items = {i["id"]: i for i in get("/api/library")["items"]}
+    assert items["Películas/Dune.mkv"]["title"] == "Dune" and items["Películas/Dune.mkv"]["type"] == "movie"
+    assert items["Películas/Nueva Serie"]["poster"].endswith("poster.jpg")
+    assert "Películas" not in items and "Series/Lost S01E02.mkv" in items
+    albums = {a["title"]: a for a in get("/api/photos")["albums"]}
+    assert "Imágenes/foto.jpg" in {p["id"] for p in albums["Fotos sueltas"]["photos"]}
+    music = {a["title"]: a for a in get("/api/music")["albums"]}
+    assert "Música/canción.mp3" in {t["id"] for t in music["Sueltas"]["tracks"]}
+    assert "Disco" in music
+
+    assert post("/api/rename", {"id": "Películas/Dune.mkv", "name": "Dune 2"})["id"] == "Películas/Dune 2.mkv"
+    rejects_rename = [{"id": "Películas", "name": "Otra"}, {"id": "Películas/Nueva Serie/T01", "name": "x"}]
+    for payload in rejects_rename:
+        try:
+            post("/api/rename", payload)
+            assert False, payload
+        except urllib.error.HTTPError as e:
+            assert e.code == 403, (payload, e.code)
+    try:
+        post("/api/delete", {"id": "Películas"})
+        assert False, "no se borra una categoría entera"
+    except urllib.error.HTTPError as e:
+        assert e.code == 400, e.code
+    assert post("/api/delete", {"id": "Películas/Nueva Serie"})["ok"]
 
     # un intento de salirse termina dentro de media, nunca fuera
     assert put("/api/upload/..%2F..%2Ffuera.mkv", b"x")["ok"]
-    assert (root / "fuera.mkv").is_file(), "debe caer dentro de la carpeta de medios"
+    assert (root / "Películas" / "fuera.mkv").is_file(), "debe caer dentro de la carpeta de medios"
     assert not (root.parent / "fuera.mkv").exists(), "jamás fuera de la carpeta de medios"
 
     for bad in ("/api/upload/malo.exe", "/api/upload/malo.sh"):

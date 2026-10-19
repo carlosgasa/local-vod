@@ -14,14 +14,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,7 +26,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.vod.R
 import com.local.vod.presentation.TvButton
-import com.local.vod.presentation.focusHighlight
 import com.local.vod.presentation.formatBytes
 import com.local.vod.presentation.neonBackground
 import com.local.vod.presentation.screenPadding
@@ -47,7 +42,6 @@ fun UploadScreen(
     val files by viewModel.files.collectAsStateWithLifecycle()
     val baseUrl by viewModel.baseUrl.collectAsStateWithLifecycle()
     val uploading by viewModel.uploading.collectAsStateWithLifecycle()
-    var folder by remember { mutableStateOf("") }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) {
         viewModel.addFiles(it)
     }
@@ -77,17 +71,8 @@ fun UploadScreen(
             text = "Elegir archivos",
         )
         Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = folder,
-            onValueChange = { folder = it },
-            label = { Text("Carpeta destino (opcional)") },
-            placeholder = { Text("Breaking Bad/Temporada 01") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().focusHighlight(),
-        )
-        Spacer(Modifier.height(12.dp))
         TvButton(
-            onClick = { viewModel.upload(folder) },
+            onClick = { viewModel.upload() },
             text = "Subir archivos",
             icon = R.drawable.ic_add,
             enabled = !uploading && files.any { it.result == "Pendiente" },

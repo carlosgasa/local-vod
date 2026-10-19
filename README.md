@@ -90,19 +90,29 @@ python3 server/test_server.py         # autochequeo del servidor
 
 ## Cómo meter contenido
 
-Arrastra carpetas dentro de `media/`. Una carpeta = una película o una serie:
+La biblioteca se ordena en cuatro carpetas que el servidor crea al arrancar. Lo que se sube
+desde el panel o la app cae solo en la que le toca: video en `Películas` (o en `Series` si lleva
+`S01E02` en el nombre), audio en `Música` e imágenes en `Imágenes`. Dentro de cada una, una
+carpeta = una película, una serie, un disco o un álbum:
 
 ```
 media/
-├── Dune (2021)/                 → película (un solo video)
-│   ├── poster.jpg
-│   └── Dune.mkv
-└── Breaking Bad/                → serie (tiene carpetas de temporada)
-    ├── poster.jpg
-    └── Temporada 01/
-        ├── S01E01 - Pilot.mkv
-        └── S01E01 - Pilot.es.srt   → subtítulo externo, idioma "es"
+├── Películas/
+│   ├── Dune (2021)/             → película (un solo video)
+│   │   ├── poster.jpg
+│   │   └── Dune.mkv
+│   └── Recién subida.mp4        → un video suelto también es una película
+├── Series/
+│   └── Breaking Bad/            → serie (tiene carpetas de temporada)
+│       ├── poster.jpg
+│       └── Temporada 01/
+│           ├── S01E01 - Pilot.mkv
+│           └── S01E01 - Pilot.es.srt   → subtítulo externo, idioma "es"
+├── Música/
+└── Imágenes/
 ```
+
+Las carpetas que ya estuvieran sueltas en `media/` se siguen viendo igual.
 
 - El nombre de la carpeta es el título que se ve en la tele.
 - Carátula: `poster`, `cover`, `folder` o `caratula` en `.jpg/.jpeg/.png/.webp`.

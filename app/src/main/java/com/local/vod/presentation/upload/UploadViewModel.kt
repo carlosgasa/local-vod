@@ -80,18 +80,17 @@ class UploadViewModel @Inject constructor(
         _files.value = emptyList()
     }
 
-    fun upload(folder: String) {
+    // Solo el nombre: el servidor decide si va a Películas, Series, Música o Imágenes.
+    fun upload() {
         if (_uploading.value) return
         viewModelScope.launch {
             val base = server.baseUrl.first() ?: return@launch
             _uploading.value = true
             try {
-                val prefix = folder.trim().trim('/')
                 for (file in _files.value.filter { it.result == "Pendiente" }) {
-                    val path = if (prefix.isEmpty()) file.name else "$prefix/${file.name}"
                     update(file.id) { it.copy(result = "Subiendo…") }
                     runCatching {
-                        api.upload(base, context.contentResolver, file.uri, path, file.size) { percent ->
+                        api.upload(base, context.contentResolver, file.uri, file.name, file.size) { percent ->
                             update(file.id) { it.copy(progress = percent) }
                         }
                     }.onSuccess {

@@ -110,9 +110,10 @@
 
 <h2 id="subir">Meter videos sin tocar carpetas</h2>
 <div class="card">
-  En el panel, <b>Subir videos</b> → <i>Elegir archivos…</i>. Puedes escribir una carpeta destino
-  (por ejemplo <code>Breaking Bad/Temporada 01</code>) y se crea sola. Sirve desde cualquier
-  aparato de la casa, incluido el propio celular.
+  En el panel, <b>Subir</b> → <i>Elegir archivos…</i>. No pregunta carpeta: cada archivo cae
+  solo en la suya, <b>Películas</b>, <b>Series</b> (los videos con <code>S01E02</code> en el
+  nombre), <b>Música</b> o <b>Imágenes</b>. Después, desde la PC, puedes moverlo a una subcarpeta.
+  Sirve desde cualquier aparato de la casa, incluido el propio celular.
   <p class="dim" style="margin:10px 0 0">
     Es la vía recomendada cuando el servidor corre en un <b>celular con Termux</b>: Android no deja
     que el servidor lea la tarjeta, pero sí puede guardar en su propia carpeta. El archivo solo
@@ -135,15 +136,22 @@
 
 <h2 id="carpetas">Poner videos: una carpeta = una película o una serie</h2>
 <pre>media/
-├── Dune (2021)/                 → película (un solo video dentro)
-│   ├── poster.jpg
-│   └── Dune.mkv
-└── Breaking Bad/                → serie (tiene carpetas de temporada)
-    ├── poster.jpg
-    └── Temporada 01/
-        ├── S01E01 - Pilot.mkv
-        └── S01E01 - Pilot.es.srt   → subtítulo externo en español</pre>
+├── Películas/
+│   ├── Dune (2021)/             → película (un solo video dentro)
+│   │   ├── poster.jpg
+│   │   └── Dune.mkv
+│   └── Recién subida.mp4        → un video suelto también es una película
+├── Series/
+│   └── Breaking Bad/            → serie (tiene carpetas de temporada)
+│       ├── poster.jpg
+│       └── Temporada 01/
+│           ├── S01E01 - Pilot.mkv
+│           └── S01E01 - Pilot.es.srt   → subtítulo externo en español
+├── Música/
+└── Imágenes/</pre>
 <ul>
+  <li>El servidor crea las cuatro carpetas al arrancar. Las carpetas antiguas que estén sueltas
+      en <code>media</code> se siguen viendo igual.</li>
   <li>El <b>nombre de la carpeta</b> es el título que se ve en la tele.</li>
   <li>La <b>carátula</b> puede llamarse <code>poster</code>, <code>cover</code>, <code>folder</code>
       o <code>caratula</code>, en <code>.jpg</code>, <code>.png</code> o <code>.webp</code>.</li>
@@ -154,8 +162,9 @@
 
 <h2 id="fotos">Fotos y música</h2>
 <div class="card">
-  Una carpeta con <b>imágenes</b> y sin ningún video es un álbum de fotos; una con
-  <b>audio</b> (.mp3, .flac, .m4a…) y sin video es un disco. Aparecen en la app en los botones de
+  Cada carpeta dentro de <code>Imágenes</code> es un álbum de fotos, y cada una dentro de
+  <code>Música</code> es un disco (.mp3, .flac, .m4a…). Lo que esté suelto se junta en «Fotos
+  sueltas» y en «Sueltas». Aparecen en la app en los botones de
   arriba: el de la foto y el de la nota musical. No hay que configurar nada, basta con dejar la
   carpeta dentro de la carpeta de medios.
   <p class="dim" style="margin:10px 0 0">
@@ -167,7 +176,7 @@
 <h2 id="subir-app">Subir desde el celular, sin navegador</h2>
 <div class="card">
   En la app, el botón <b>+</b> de arriba abre la pantalla de subir: eliges archivos del celular,
-  escribes la carpeta destino si quieres y se guardan en la biblioteca del servidor. También
+  y cada uno cae solo en su carpeta de la biblioteca del servidor. También
   funciona al revés: desde la galería o cualquier app, <b>Compartir → Local VOD</b>.
   <p class="dim" style="margin:10px 0 0">
     Acepta video, audio, imágenes y subtítulos. Cualquier otro tipo de archivo se rechaza.

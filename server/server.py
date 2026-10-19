@@ -40,6 +40,10 @@ LINK_EXT = {".url", ".link"}
 POSTER_STEMS = ("poster", "cover", "folder", "caratula", "carátula")
 POSTER_EXT = (".jpg", ".jpeg", ".png", ".webp")
 PHOTO_EXT = set(POSTER_EXT) | {".gif"}
+# La biblioteca se ordena sola en estas carpetas: lo que se sube cae en la que le
+# toca por tipo, y después cada quien lo mueve a una subcarpeta desde la PC.
+MOVIES, SERIES, MUSIC, PHOTOS = "Películas", "Series", "Música", "Imágenes"
+CATEGORIES = (MOVIES, SERIES, MUSIC, PHOTOS)
 CHUNK = 64 * 1024
 
 SEASON_RE = re.compile(r"(?:season|temporada|temp|^s)[\s._-]*0*(\d+)", re.I)
@@ -274,6 +278,36 @@ def videos_in(folder):
     )
 
 
+def playable(path):
+    if path.suffix.lower() in LINK_EXT:
+        return read_link_file(path) is not None
+    return path.suffix.lower() in VIDEO_EXT
+
+
+def library_entries(*categories):
+    """Títulos o álbumes: lo que hay dentro de esas categorías y, como antes de
+    que existieran, las carpetas sueltas de la raíz que no son categoría."""
+    if not MEDIA_ROOT.is_dir():
+        return []
+    entries = []
+    for entry in MEDIA_ROOT.iterdir():
+        if entry.name.startswith("."):
+            continue
+        if entry.name in CATEGORIES:
+            if entry.name in categories and entry.is_dir():
+                entries += [p for p in entry.iterdir() if not p.name.startswith(".")]
+        elif entry.is_dir():
+            entries.append(entry)
+    return sorted(entries, key=lambda p: natkey(p.name))
+
+
+def title_root(path):
+    """La carpeta (o el video suelto) de la que cuelga un archivo de la biblioteca."""
+    parts = path.relative_to(MEDIA_ROOT).parts
+    depth = 2 if len(parts) > 1 and parts[0] in CATEGORIES else 1
+    return MEDIA_ROOT.joinpath(*parts[:depth])
+
+
 def parse_episode(name):
     m = EPISODE_RE.search(name)
     if not m:
@@ -330,10 +364,12 @@ def episode_of(video, default_season, durations):
 
 
 def scan_title(folder, durations=None):
-    """Una carpeta de primer nivel = una película o una serie."""
+    """Una carpeta = una película o una serie; un video suelto = una película."""
     durations = durations if durations is not None else load_durations()
-    episodes = [episode_of(v, 1, durations) for v in videos_in(folder)]
-    season_dirs = [d for d in sorted(folder.iterdir(), key=natkey) if d.is_dir() and videos_in(d)]
+    loose = not folder.is_dir()
+    episodes = [episode_of(v, 1, durations) for v in ([folder] if loose else videos_in(folder))]
+    season_dirs = [] if loose else [
+        d for d in sorted(folder.iterdir(), key=natkey) if d.is_dir() and videos_in(d)]
     for i, sub in enumerate(season_dirs, start=1):
         m = SEASON_RE.search(sub.name)
         default = int(m.group(1)) if m else i
@@ -352,9 +388,9 @@ def scan_title(folder, durations=None):
     preview = preview_path(first, first.stat().st_size) if first else None
     return {
         "id": str(folder.relative_to(MEDIA_ROOT)),
-        "title": folder.name,
+        "title": folder.stem if loose else folder.name,
         "type": "movie" if is_movie else "series",
-        "poster": find_poster(folder),
+        "poster": None if loose else find_poster(folder),
         "preview": "/preview/" + preview.name if preview and preview.is_file() and ffmpeg_available() else None,
         "addedAt": max(ep["addedAt"] for ep in episodes),
         "seasons": [{"number": n, "episodes": seasons[n]} for n in sorted(seasons)],
@@ -362,12 +398,10 @@ def scan_title(folder, durations=None):
 
 
 def scan():
-    if not MEDIA_ROOT.is_dir():
-        return []
     items = []
     durations = load_durations()
-    for d in sorted(MEDIA_ROOT.iterdir(), key=natkey):
-        if not d.is_dir() or d.name.startswith("."):
+    for d in library_entries(MOVIES, SERIES):
+        if not d.is_dir() and not playable(d):
             continue
         item = scan_title(d, durations)
         if item:
@@ -375,13 +409,14 @@ def scan():
     return items
 
 
-def loose_files(extensions):
-    """Lo que se comparte a la app sin carpeta destino cae en la raíz de la biblioteca:
+def loose_files(extensions, category):
+    """Lo subido cae suelto en su categoría (o, con versiones viejas, en la raíz):
     si no se mira ahí, la foto recién subida no aparece en ningún sitio."""
+    folders = [f for f in (MEDIA_ROOT, MEDIA_ROOT / category) if f.is_dir()]
     return sorted(
-        (p for p in MEDIA_ROOT.iterdir()
+        (p for folder in folders for p in folder.iterdir()
          if p.is_file() and p.suffix.lower() in extensions and p.stem.lower() not in POSTER_STEMS),
-        key=natkey,
+        key=lambda p: natkey(p.name),
     )
 
 
@@ -389,8 +424,8 @@ def photo_albums():
     if not MEDIA_ROOT.is_dir():
         return []
     albums = []
-    for folder in sorted(MEDIA_ROOT.iterdir(), key=natkey):
-        if not folder.is_dir() or folder.name.startswith("."):
+    for folder in library_entries(PHOTOS):
+        if not folder.is_dir():
             continue
         files = [p for p in folder.rglob("*") if p.is_file()]
         if any(p.suffix.lower() in VIDEO_EXT | LINK_EXT for p in files):
@@ -406,20 +441,22 @@ def photo_albums():
         albums.append({"id": str(folder.relative_to(MEDIA_ROOT)), "title": folder.name,
                        "cover": find_poster(folder) or photos[0]["url"],
                        "count": len(photos), "photos": photos})
-    loose = [{"id": p.name, "name": p.name, "url": media_url(p), "bytes": p.stat().st_size}
-             for p in loose_files(PHOTO_EXT)]
+    loose = [{"id": str(p.relative_to(MEDIA_ROOT)), "name": p.name, "url": media_url(p),
+              "bytes": p.stat().st_size} for p in loose_files(PHOTO_EXT, PHOTOS)]
     if loose:
         albums.insert(0, {"id": ".fotos-sueltas", "title": "Fotos sueltas",
                           "cover": loose[0]["url"], "count": len(loose), "photos": loose})
     return albums
+
+
 def music():
     if not MEDIA_ROOT.is_dir():
         return {"albums": []}
     durations = load_durations()
     albums = []
     pending = []
-    for folder in sorted(MEDIA_ROOT.iterdir(), key=natkey):
-        if not folder.is_dir() or folder.name.startswith(".") or folder.is_symlink():
+    for folder in library_entries(MUSIC):
+        if not folder.is_dir() or folder.is_symlink():
             continue
         files = [p for p in folder.rglob("*") if p.is_file() and not p.is_symlink()]
         if any(p.suffix.lower() in VIDEO_EXT | LINK_EXT for p in files):
@@ -440,12 +477,15 @@ def music():
         albums.append({"id": str(folder.relative_to(MEDIA_ROOT)), "title": folder.name,
                        "cover": find_poster(folder), "tracks": tracks})
         pending.extend(audio)
-    loose = loose_files(AUDIO_EXT)
+    loose = loose_files(AUDIO_EXT, MUSIC)
     if loose:
-        tracks = [{"id": p.name, "title": p.stem, "url": media_url(p),
-                   "durationSeconds": int(durations[f"{p.name}:{p.stat().st_size}"])
-                   if f"{p.name}:{p.stat().st_size}" in durations else None,
-                   "bytes": p.stat().st_size} for p in loose]
+        tracks = []
+        for p in loose:
+            relative, size = str(p.relative_to(MEDIA_ROOT)), p.stat().st_size
+            key = f"{relative}:{size}"
+            tracks.append({"id": relative, "title": p.stem, "url": media_url(p),
+                           "durationSeconds": int(durations[key]) if key in durations else None,
+                           "bytes": size})
         albums.insert(0, {"id": ".musica-suelta", "title": "Sueltas", "cover": None, "tracks": tracks})
         pending.extend(loose)
     start_media_scans(pending, thumbnails=False)
@@ -761,8 +801,7 @@ def start_media_scans(files, thumbnails=True):
         threading.Thread(target=generate_thumbs, args=(files,), daemon=True).start()
     with _preview_lock:
         if thumbnails and ffmpeg_available() and not _scanning_previews:
-            folders = {p.relative_to(MEDIA_ROOT).parts[0] for p in files}
-            sources = [preview_source(MEDIA_ROOT / name) for name in folders]
+            sources = [preview_source(root) for root in {title_root(p) for p in files}]
             pending = [p for p in sources if p and not preview_path(p, p.stat().st_size).is_file()]
             if pending:
                 _scanning_previews = True
@@ -826,11 +865,26 @@ def status():
 # ---------------------------------------------------------------- subida
 
 # El servidor escribe en SU carpeta de medios; los clientes no necesitan acceso a ella.
+def category_for(name):
+    """Dónde cae lo que se sube: por tipo, y un video con S01E02 en el nombre es de una serie."""
+    ext = Path(name).suffix.lower()
+    if ext in AUDIO_EXT:
+        return MUSIC
+    if ext in PHOTO_EXT:
+        return PHOTOS
+    return SERIES if parse_episode(name)[0] is not None else MOVIES
+
+
 def safe_target(relative):
     """Ruta destino dentro de media/, sin trucos: nada de .. ni rutas absolutas."""
     parts = [p for p in unquote(relative).replace("\\", "/").split("/") if p not in ("", ".", "..")]
     if not parts:
         return None
+    if parts[0] not in CATEGORIES:
+        # una carpeta que ya existe en alguna categoría se respeta (la carátula de
+        # una película no se va a Imágenes); si no, decide el tipo del archivo
+        existing = next((c for c in CATEGORIES if len(parts) > 1 and (MEDIA_ROOT / c / parts[0]).is_dir()), None)
+        parts = [existing or category_for(parts[-1])] + parts
     target = Path(os.path.normpath(MEDIA_ROOT.joinpath(*parts)))
     if MEDIA_ROOT not in target.parents:
         return None
@@ -879,17 +933,28 @@ def managed_path(identifier):
     return MEDIA_ROOT / relative
 
 
+def is_title(identifier):
+    """Un título vive en la raíz o dentro de una categoría; la categoría en sí no se toca."""
+    parts = Path(identifier).parts
+    if len(parts) == 1:
+        return parts[0] not in CATEGORIES
+    return len(parts) == 2 and parts[0] in CATEGORIES
+
+
 def rename_title(identifier, name):
     if not isinstance(name, str) or not name.strip() or "/" in name or "\\" in name or ".." in name:
         return None, 400
     name = name.strip()
     source = managed_path(identifier)
-    if source is None or len(Path(identifier).parts) != 1:
+    if source is None or not is_title(identifier):
         return None, 403
-    if not source.is_dir() or source.is_symlink():
+    if source.is_symlink() or not (source.is_dir() or playable(source)):
         return None, 404
-    target = managed_path(name)
-    if target is None or len(Path(name).parts) != 1:
+    # un video suelto conserva su extensión: se renombra el título, no el formato
+    leaf = name if source.is_dir() else name + source.suffix
+    new_id = str(Path(identifier).parent / leaf)
+    target = managed_path(new_id)
+    if target is None or not is_title(new_id):
         return None, 400
     if os.path.lexists(target):
         return None, 409
@@ -897,7 +962,7 @@ def rename_title(identifier, name):
         source.rename(target)
     except OSError:
         return None, 400
-    return {"ok": True, "id": name}, 200
+    return {"ok": True, "id": new_id}, 200
 
 
 def delete_media(identifier):
@@ -906,7 +971,7 @@ def delete_media(identifier):
         return None, 403
     if not target.exists():
         return None, 404
-    if target.is_dir() and len(Path(identifier).parts) != 1:
+    if target.is_dir() and not is_title(identifier):
         return None, 400
     if not target.is_dir() and not target.is_file():
         return None, 400
@@ -1215,7 +1280,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+    for category in CATEGORIES:
+        (MEDIA_ROOT / category).mkdir(parents=True, exist_ok=True)
     srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     srv.daemon_threads = True
     print(f"Local VOD -> http://{lan_ip()}:{PORT}  (medios: {MEDIA_ROOT})", flush=True)

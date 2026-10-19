@@ -65,16 +65,15 @@
   </div>
 </div>
 
-<h2>Subir videos</h2>
+<h2>Subir</h2>
 <div class="card">
   <p class="small" style="margin:0 0 10px">
-    Para meter videos sin tocar la carpeta a mano: elige los archivos y se guardan en la carpeta de
-    medios de este servidor. Si escribes una carpeta, se crea (por ejemplo
-    <code>Breaking Bad/Temporada 01</code>).
+    Elige los archivos y cada uno cae solo en su carpeta: <b>Películas</b>, <b>Series</b> (los
+    videos con <code>S01E02</code> en el nombre), <b>Música</b> o <b>Imágenes</b>. Después, desde
+    la PC, puedes moverlos a una subcarpeta (por ejemplo <code>Series/Breaking Bad/Temporada 01</code>).
   </p>
-  <input type="text" id="uploadFolder" placeholder="Carpeta (opcional)" style="width:320px">
   <input type="file" id="uploadFiles" multiple
-         accept=".mkv,.mp4,.m4v,.avi,.webm,.mov,.ts,.srt,.ass,.vtt,.jpg,.jpeg,.png,.webp"
+         accept=".mkv,.mp4,.m4v,.avi,.webm,.mov,.ts,.mpg,.mpeg,.wmv,.flv,.srt,.ass,.ssa,.vtt,.jpg,.jpeg,.png,.webp,.gif,.mp3,.m4a,.flac,.ogg,.opus,.wav,.aac"
          style="display:none" onchange="uploadFiles(this.files)">
   <button onclick="document.getElementById('uploadFiles').click()">Elegir archivos…</button>
   <div id="uploads"></div>
@@ -150,7 +149,7 @@ function table(items) {
         <button data-id="${esc(encodeURIComponent(e.id))}" onclick="convert(decodeURIComponent(this.dataset.id))">Convertir a MP4</button></div>`).join('') : '';
     const id = esc(encodeURIComponent(it.id));
     return `<tr><td>${poster}</td><td><b>${esc(it.title)}</b>${warn}
-            <div><button data-id="${id}" onclick="renameTitle(decodeURIComponent(this.dataset.id))">Renombrar</button>
+            <div><button data-id="${id}" data-title="${esc(it.title)}" onclick="renameTitle(decodeURIComponent(this.dataset.id), this.dataset.title)">Renombrar</button>
             <button data-id="${id}" onclick="deleteItem(decodeURIComponent(this.dataset.id))">Borrar</button></div></td>
             <td class="dim">${kind}</td><td class="dim">${episodes.length} video${episodes.length > 1 ? 's' : ''}</td></tr>
             ${files ? `<tr><td></td><td class="files" colspan="3">${files}</td></tr>` : ''}`;
@@ -246,8 +245,8 @@ async function changeMedia(path, body) {
   return true;
 }
 
-async function renameTitle(id) {
-  const name = prompt('Nuevo nombre del título', id);
+async function renameTitle(id, title) {
+  const name = prompt('Nuevo nombre del título', title);
   if (name === null || !name.trim()) return;
   await changeMedia('/api/rename', { id, name });
 }
@@ -293,11 +292,10 @@ async function deleteLink(url) {
 async function openFolder() { await fetch('/api/open-folder', { method: 'POST' }); }
 
 function uploadFiles(files) {
-  const folder = $('uploadFolder').value.trim().replace(/^\/+|\/+$/g, '');
-  [...files].forEach(file => uploadOne(file, folder));
+  [...files].forEach(uploadOne);
 }
 
-function uploadOne(file, folder) {
+function uploadOne(file) {
   const row = document.createElement('div');
   row.style.margin = '10px 0';
   row.innerHTML = `<b>${esc(file.name)}</b> <span class="dim">· 0 %</span>
@@ -306,9 +304,8 @@ function uploadOne(file, folder) {
   const label = row.querySelector('span');
   const bar = row.querySelector('.bar div');
 
-  const path = (folder ? folder + '/' : '') + file.name;
   const request = new XMLHttpRequest();
-  request.open('PUT', '/api/upload/' + path.split('/').map(encodeURIComponent).join('/'));
+  request.open('PUT', '/api/upload/' + encodeURIComponent(file.name));
   request.upload.onprogress = e => {
     if (!e.lengthComputable) return;
     const percent = Math.round(e.loaded / e.total * 100);
@@ -317,7 +314,7 @@ function uploadOne(file, folder) {
   };
   request.onload = () => {
     const ok = request.status === 200;
-    label.textContent = ok ? '· listo' : '· error: ' + (JSON.parse(request.responseText).error || request.status);
+    label.textContent = ok ? '· listo, en ' + JSON.parse(request.responseText).file.split('/')[0] : '· error: ' + (JSON.parse(request.responseText).error || request.status);
     label.className = ok ? 'dim' : 'warn';
     bar.style.width = '100%';
     if (ok) load();
