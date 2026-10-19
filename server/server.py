@@ -560,6 +560,55 @@ def preview_source(folder):
     return None
 
 
+EPISODE_JUNK = re.compile(
+    r"\b(lat|latino|dual|castellano|esp|spa|sub|subs|subtitulado|1080p|720p|2160p|4k|hd|"
+    r"web-?dl|webrip|bluray|x26[45]|hevc|aac|ac3)\b", re.I)
+
+
+def episode_name(stem, number):
+    """Lo que queda tras el S01E02: el nombre del capítulo, si lo trae; si no, "Episodio 2"."""
+    m = EPISODE_RE.search(stem)
+    if not m:
+        return stem
+    rest = re.sub(r"[._]", " ", stem[m.end():])
+    rest = EPISODE_JUNK.sub(" ", rest)
+    rest = re.sub(r"\[.*?\]|\(\s*\d*\s*\)", " ", rest)  # [etiquetas] y el "(1)" de las copias
+    rest = re.sub(r"\s+", " ", rest).strip(" -.")
+    return rest or (f"Episodio {number}" if number is not None else stem)
+
+
+def organize_series():
+    """Los capítulos que caen sueltos en Series/ se ordenan solos en Serie/Temporada NN/.
+
+    Lo que se está copiando (modificado hace menos de 2 minutos) se deja para la siguiente
+    vez: moverlo a medias rompería la copia.
+    """
+    root = MEDIA_ROOT / SERIES
+    if not root.is_dir():
+        return
+    now = time.time()
+    for f in list(root.iterdir()):
+        try:
+            if not f.is_file() or f.suffix.lower() not in VIDEO_EXT | SUB_EXT or now - f.stat().st_mtime < 120:
+                continue
+            m = EPISODE_RE.search(f.name)
+            if not m:
+                continue
+            season, _ = parse_episode(f.name)
+            show = clean_title(f.name[:m.start()]).strip(" -")
+            if not show:
+                continue
+            # "breaking.bad" y "Breaking Bad" son la misma serie: se reutiliza la carpeta que haya
+            folder = next((d for d in root.iterdir() if d.is_dir() and d.name.lower() == show.lower()), root / show)
+            target = folder / f"Temporada {season:02d}" / f.name
+            if target.exists():
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            f.rename(target)
+        except OSError:
+            continue  # otro escaneo se adelantó, o el archivo se fue mientras tanto
+
+
 def episode_of(video, default_season, durations):
     season, number = parse_episode(video.name)
     remote = read_link_file(video) if video.suffix.lower() in LINK_EXT else None
@@ -569,7 +618,7 @@ def episode_of(video, default_season, durations):
     thumb = None if remote else thumb_path(video, stat.st_size)
     return {
         "id": str(video.relative_to(MEDIA_ROOT)),
-        "title": video.stem,
+        "title": episode_name(video.stem, number),
         "season": season if season is not None else default_season,
         "number": number,  # None -> la app usa el orden de la lista
         "url": remote or media_url(video),
@@ -619,6 +668,7 @@ def scan_title(folder, durations=None):
 
 
 def scan():
+    organize_series()
     items = []
     durations = load_durations()
     for d in library_entries(MOVIES, SERIES):

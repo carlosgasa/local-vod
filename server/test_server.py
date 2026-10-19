@@ -445,6 +445,35 @@ def test_clean_title():
     print("títulos OK")
 
 
+def test_organize_series(tmp):
+    """Los capítulos sueltos en Series/ se ordenan en Serie/Temporada NN/; lo recién copiado espera."""
+    import os
+    import time
+    root = Path(tmp) / "media_series"
+    series = root / "Series"
+    series.mkdir(parents=True)
+    old = time.time() - 600
+    for name in ("Breaking Bad 1x01 Lat.mkv", "breaking.bad.s02e03.1080p.mkv", "Breaking Bad 1x01 Lat.es.srt"):
+        (series / name).write_bytes(b"v")
+        os.utime(series / name, (old, old))
+    (series / "Breaking Bad 1x02 Lat.mkv").write_bytes(b"copiando")  # recién llegado
+    saved = server.MEDIA_ROOT
+    server.MEDIA_ROOT = root
+    try:
+        server.organize_series()
+    finally:
+        server.MEDIA_ROOT = saved
+    assert (series / "Breaking Bad" / "Temporada 01" / "Breaking Bad 1x01 Lat.mkv").is_file()
+    assert (series / "Breaking Bad" / "Temporada 01" / "Breaking Bad 1x01 Lat.es.srt").is_file()
+    assert (series / "Breaking Bad" / "Temporada 02" / "breaking.bad.s02e03.1080p.mkv").is_file()
+    assert (series / "Breaking Bad 1x02 Lat.mkv").is_file(), "lo que se está copiando no se mueve"
+    assert server.episode_name("Breaking Bad 1x01 Lat", 1) == "Episodio 1"
+    assert server.episode_name("Breaking Bad 2x10 Lat (1)", 10) == "Episodio 10"
+    assert server.episode_name("S01E01 - Pilot", 1) == "Pilot"
+    assert server.episode_name("corto 2", None) == "corto 2"
+    print("series OK")
+
+
 def test_iptv(tmp):
     m3u = """#EXTM3U
 #EXTINF:-1 tvg-id="a" tvg-logo="https://logo/a.png" group-title="News;General",Canal 1, Noticias
@@ -523,6 +552,7 @@ if __name__ == "__main__":
         test_mosaic(tmp)
         test_iptv(tmp)
         test_clean_title()
+        test_organize_series(tmp)
         # un video suelto en la raiz llega a preview_source como si fuera carpeta
         suelto = root / "suelto.mkv"
         suelto.write_bytes(b"x" * 16)
