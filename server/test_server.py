@@ -415,7 +415,11 @@ def test_mosaic(tmp):
     subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=duration=4:size=640x360:rate=10",
                     "-pix_fmt", "yuv420p", str(video)], check=True)
     out = Path(tmp) / "mosaico.jpg"
-    subprocess.run(server.mosaic_command(video, 4.0, out), check=True, capture_output=True)
+    assert server.make_mosaic(video, 4.0, out)
+    # un tramo que no existe (más allá del final) se rellena con los fotogramas que sí salieron
+    out2 = Path(tmp) / "mosaico-roto.jpg"
+    assert server.make_mosaic(video, 7.0, out2) and out2.is_file()
+    assert not list(Path(tmp).glob("mosaico*.?.jpg")), "no deben quedar fotogramas sueltos"
     size = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "csv=p=0",
                            str(out)], capture_output=True, text=True).stdout.strip()
     assert size == "480,720", size

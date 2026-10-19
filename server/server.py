@@ -1060,17 +1060,40 @@ def generate_previews(files):
 MOSAIC_TILE = (240, 360)
 
 
-def mosaic_command(path, seconds, target):
-    """Un fotograma al 20, 40, 60 y 80 % del video, en una cuadrícula de 2x2."""
+def make_mosaic(path, seconds, target):
+    """Un fotograma al 20, 40, 60 y 80 % del video, en una cuadrícula de 2x2.
+
+    Cada fotograma se saca por separado y con su propio límite de tiempo: un archivo
+    con un tramo dañado no atasca el resto, y el hueco se rellena con otro fotograma.
+    """
     times = [seconds * f for f in (0.2, 0.4, 0.6, 0.8)] if seconds > 0 else [1, 10, 30, 60]
     w, h = MOSAIC_TILE
-    args = ["ffmpeg", "-nostdin", "-y"]
-    for t in times:
-        args += ["-ss", f"{t:.2f}", "-i", str(path)]
-    tiles = ";".join(
-        f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1[v{i}]" for i in range(4))
-    grid = "[v0][v1][v2][v3]xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0[out]"
-    return args + ["-filter_complex", f"{tiles};{grid}", "-map", "[out]", "-frames:v", "1", str(target)]
+    tiles = []
+    for i, t in enumerate(times):
+        tile = target.with_name(f"{target.stem}.{i}.jpg")
+        # yuvj420p: el codificador de JPG no acepta algunos rangos de color que traen los videos
+        cmd = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-ss", f"{t:.2f}", "-i", str(path), "-frames:v", "1",
+               "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,format=yuvj420p",
+               str(tile)]
+        try:
+            ok = subprocess.run(cmd, capture_output=True, timeout=60).returncode == 0 and tile.is_file()
+        except subprocess.TimeoutExpired:
+            ok = False
+        if ok:
+            tiles.append(tile)
+    try:
+        if not tiles:
+            return False
+        inputs = [tiles[i % len(tiles)] for i in range(4)]
+        cmd = ["ffmpeg", "-nostdin", "-y", "-v", "error"]
+        for tile in inputs:
+            cmd += ["-i", str(tile)]
+        cmd += ["-filter_complex", "xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0,format=yuvj420p",
+                "-frames:v", "1", str(target)]
+        return subprocess.run(cmd, capture_output=True, timeout=60).returncode == 0 and target.is_file()
+    finally:
+        for tile in tiles:
+            tile.unlink(missing_ok=True)
 
 
 def generate_mosaics(files):
@@ -1084,9 +1107,7 @@ def generate_mosaics(files):
                     continue
                 target.parent.mkdir(parents=True, exist_ok=True)
                 partial = target.with_suffix(".tmp.jpg")
-                result = subprocess.run(mosaic_command(path, probe_duration(path), partial),
-                                        capture_output=True, timeout=180)
-                if result.returncode == 0 and partial.is_file():
+                if make_mosaic(path, probe_duration(path), partial):
                     partial.replace(target)
                 else:
                     partial.unlink(missing_ok=True)
