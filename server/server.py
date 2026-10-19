@@ -399,6 +399,43 @@ def iptv(refresh=False):
 
 # ---------------------------------------------------------------- escaneo
 
+# Los nombres de archivo de descargas traen de todo: firmas, calidad, idioma, géneros,
+# la web de donde salió... En pantalla se enseña solo "Título (Año)". El archivo no se toca.
+TITLE_SMALL_WORDS = {"de", "del", "la", "las", "el", "los", "y", "a", "en", "con", "contra", "por", "para",
+                     "un", "una", "of", "the", "to", "and", "in", "on", "by", "for"}
+TITLE_GENRES = {"accion", "acción", "aventura", "ciencia", "ficcion", "ficción", "comedia", "crimen", "drama",
+                "suspenso", "terror", "guerra", "romance", "animacion", "animación", "fantasia", "fantasía",
+                "thriller", "documental", "musical", "familiar", "misterio", "western", "biografia", "biografía"}
+YEAR_RE = re.compile(r"(?<!\d)(19[3-9]\d|20[0-4]\d)(?!\d)")
+
+
+def clean_title(raw):
+    text = re.sub(r"@\w+", " ", raw)
+    years = list(YEAR_RE.finditer(text))
+    # el año que cuenta es el último: "Blade Runner 2049 (2017)"; lo de detrás es basura de la descarga
+    title = text[:years[-1].start()] if years else text
+    dotted = "." in title or "_" in title
+    title = re.sub(r"[._]", " ", title)
+    title = re.sub(r"\[.*?\]", " ", title)
+    title = re.sub(r"\(\s*\)", " ", title)
+    if not years:
+        # sin año, al final suelen venir los géneros: "TÍTULO - acción drama guerra"
+        parts = [x for x in re.split(r"\s+-\s+", title)]
+        while len(parts) > 1 and all(w.lower() in TITLE_GENRES for w in parts[-1].split()):
+            parts.pop()
+        title = " - ".join(parts)
+        title = re.sub(r"\b(1080p|720p|2160p|4k|hd|latino|lat|dual|castellano|bluray|webrip)\b", " ", title, flags=re.I)
+    title = re.sub(r"\s+", " ", title).strip(" -(")
+    letters = [c for c in title if c.isalpha()]
+    if letters and (dotted or all(c.islower() for c in letters) or all(c.isupper() for c in letters)):
+        words = title.lower().split(" ")
+        title = " ".join(w if i and w in TITLE_SMALL_WORDS else w[:1].upper() + w[1:] for i, w in enumerate(words))
+    title = title[:1].upper() + title[1:]
+    if not title:
+        return raw
+    return f"{title} ({years[-1].group(1)})" if years else title
+
+
 def natkey(name):
     """Orden natural: ep2 antes de ep10."""
     return [int(p) if p.isdigit() else p.lower() for p in re.split(r"(\d+)", str(name))]
@@ -569,7 +606,7 @@ def scan_title(folder, durations=None):
     mosaic = mosaic_path(first, first.stat().st_size) if first else None
     return {
         "id": str(folder.relative_to(MEDIA_ROOT)),
-        "title": folder.stem if loose else folder.name,
+        "title": clean_title(folder.stem if loose else folder.name),
         "type": "movie" if is_movie else "series",
         "poster": None if loose else find_poster(folder),
         "preview": "/preview/" + preview.name if preview and preview.is_file() and ffmpeg_available() else None,

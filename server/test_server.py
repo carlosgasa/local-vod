@@ -421,6 +421,29 @@ def test_mosaic(tmp):
     print("mosaico OK")
 
 
+def test_clean_title():
+    """Nombres reales de descargas: en pantalla, solo título y año."""
+    cases = {
+        "Gladiator.2000. Extended.Remastered.1080p.LATiNO-009": "Gladiator (2000)",
+        "@cesser16 El Lobo De Wall Street (2013) 720p": "El Lobo De Wall Street (2013)",
+        "John Wick Chapter 4 (2023)-@digirama-094": "John Wick Chapter 4 (2023)",
+        "Guns Akimbo (2020) [BluRay RIP][AC3 5.1 Castellano][www.PCTRELOAD.COM]": "Guns Akimbo (2020)",
+        "Robin.hood.2018.1080p-dual-lat-cinecalidad.to": "Robin Hood (2018)",
+        "BRAWL IN CELL BLOCK 99 2017 - drama suspenso-045": "Brawl in Cell Block 99 (2017)",
+        "DEATH RACE 2050 - 2017 - Acción Ciencia Ficcion Comedia": "Death Race 2050 (2017)",
+        "EL ULTIMO SOBREVIENTE - accion drama guerra": "El Ultimo Sobreviente",
+        "A ciegas (2018) latino HD-040": "A ciegas (2018)",
+        "Blade Runner 2049 (2017)": "Blade Runner 2049 (2017)",
+        "terminator": "Terminator",
+        "Breaking Bad": "Breaking Bad",
+        "Dune (2021)": "Dune (2021)",
+        "Una noche de venganza (Vanquish) (2021)": "Una noche de venganza (Vanquish) (2021)",
+    }
+    for raw, expected in cases.items():
+        assert server.clean_title(raw) == expected, (raw, server.clean_title(raw), expected)
+    print("títulos OK")
+
+
 def test_iptv(tmp):
     m3u = """#EXTM3U
 #EXTINF:-1 tvg-id="a" tvg-logo="https://logo/a.png" group-title="News;General",Canal 1, Noticias
@@ -498,6 +521,7 @@ if __name__ == "__main__":
         test_convert_plan()
         test_mosaic(tmp)
         test_iptv(tmp)
+        test_clean_title()
         # un video suelto en la raiz llega a preview_source como si fuera carpeta
         suelto = root / "suelto.mkv"
         suelto.write_bytes(b"x" * 16)
