@@ -7,13 +7,15 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 
+// Negro de sala de cine y un solo color de acento: el que marca progreso y botón principal.
 private val VodColors = darkColorScheme(
-    primary = Color(0xFF4DA3FF),
-    onPrimary = Color(0xFF07121F),
-    background = Color(0xFF13151A),
-    onBackground = Color(0xFFE8EAED),
-    surface = Color(0xFF1C1F26),
-    onSurface = Color(0xFFE8EAED),
+    primary = Color(0xFFE5243B),
+    onPrimary = Color.White,
+    background = Color(0xFF0B0B0F),
+    onBackground = Color(0xFFEDEDED),
+    surface = Color(0xFF18181D),
+    onSurface = Color(0xFFEDEDED),
+    surfaceVariant = Color(0xFF24242B),
 )
 
 @Composable

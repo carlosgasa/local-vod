@@ -32,6 +32,10 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -45,6 +49,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.local.vod.presentation.TvButton
@@ -57,6 +62,9 @@ import kotlinx.coroutines.delay
 
 /** A falta de este tiempo para terminar aparece el aviso de "siguiente episodio". */
 private const val NEXT_PROMPT_MS = 25_000L
+// Tras tantos episodios seguidos sin tocar nada, se pregunta si sigue alguien mirando.
+private const val STILL_WATCHING_AFTER = 3
+private const val SEEK_STEP_MS = 10_000L
 
 /** Lo último que se vio del reproductor: para la cuenta atrás y para guardar el progreso. */
 private data class Tick(val mediaId: String? = null, val positionMs: Long = 0L, val durationMs: Long = 0L)
@@ -81,7 +89,11 @@ fun PlayerScreen(
     // La cola son los episodios del título: así el botón de siguiente y el salto automático
     // al final los hace Media3 por su cuenta.
     val player = remember(current) {
-        ExoPlayer.Builder(context).build().apply {
+        // Si el aparato no sabe decodificar un audio (el Dolby de muchas películas en un
+        // celular), entra FFmpeg por software en lugar de quedarse mudo.
+        val renderers = DefaultRenderersFactory(context)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+        ExoPlayer.Builder(context, renderers).build().apply {
             setMediaItems(
                 current.episodes.map { it.toMediaItem() },
                 current.startIndex,
@@ -102,6 +114,11 @@ fun PlayerScreen(
     var failure by remember { mutableStateOf<String?>(null) }
     // Los datos de lo que se ve salen y se esconden con los controles, para no tapar la imagen.
     var controlsVisible by remember { mutableStateOf(true) }
+    var playerView by remember { mutableStateOf<PlayerView?>(null) }
+    var autoAdvances by remember { mutableIntStateOf(0) }
+    var askStillWatching by remember { mutableStateOf(false) }
+    // el aviso de "+10 s" del doble toque: lado (-1 o 1) y un contador para reiniciar la animación
+    var seekHint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     LaunchedEffect(player) {
         while (true) {
@@ -131,6 +148,15 @@ fun PlayerScreen(
 
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
                 failure = null
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    autoAdvances += 1
+                    if (autoAdvances >= STILL_WATCHING_AFTER) {
+                        player.pause()
+                        askStillWatching = true
+                    }
+                } else {
+                    autoAdvances = 0
+                }
                 // Salto (manual o automático): el anterior queda como visto.
                 val previous = tick
                 if (previous.mediaId != null && previous.durationMs > 0) {
@@ -183,9 +209,46 @@ fun PlayerScreen(
                         },
                     )
                     requestFocus()
+                    playerView = this
                 }
             },
         )
+
+        // Con los controles escondidos, en el celular: doble toque a un lado salta 10 s,
+        // un toque saca los controles como siempre. Con los controles fuera no se tapa nada.
+        if (!controlsVisible && !askStillWatching) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(player) {
+                        detectTapGestures(
+                            onTap = { playerView?.showController() },
+                            onDoubleTap = { offset ->
+                                val side = if (offset.x < size.width / 2) -1 else 1
+                                val target = player.currentPosition + side * SEEK_STEP_MS
+                                player.seekTo(target.coerceIn(0L, maxOf(0L, player.duration)))
+                                seekHint = side to ((seekHint?.second ?: 0) + 1)
+                            },
+                        )
+                    },
+            )
+        }
+        seekHint?.let { (side, count) ->
+            LaunchedEffect(count) {
+                delay(700)
+                seekHint = null
+            }
+            Text(
+                if (side < 0) "−10 s" else "+10 s",
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
+                modifier = Modifier
+                    .align(if (side < 0) Alignment.CenterStart else Alignment.CenterEnd)
+                    .padding(horizontal = 56.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))
+                    .padding(horizontal = 18.dp, vertical = 10.dp),
+            )
+        }
 
         val index = current.episodes.indexOfFirst { it.id == tick.mediaId }
         val playing = current.episodes.getOrNull(index)
@@ -228,6 +291,18 @@ fun PlayerScreen(
             )
         }
 
+        if (askStillWatching) {
+            StillWatchingPanel(
+                onContinue = {
+                    autoAdvances = 0
+                    askStillWatching = false
+                    player.play()
+                },
+                onExit = onBack,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+
         if (failure == null && next != null && !cancelled && remainingMs in 0..NEXT_PROMPT_MS) {
             NextEpisodePrompt(
                 next = next,
@@ -240,6 +315,36 @@ fun PlayerScreen(
                 },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(40.dp),
             )
+        }
+    }
+}
+
+@Composable
+private fun StillWatchingPanel(onContinue: () -> Unit, onExit: () -> Unit, modifier: Modifier = Modifier) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    Column(
+        modifier
+            .background(Color.Black.copy(alpha = 0.85f), RoundedCornerShape(12.dp))
+            .padding(28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("¿Sigues ahí?", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Llevas varios episodios seguidos. Lo dejamos en pausa por si te quedaste dormido.",
+            color = Color.White.copy(alpha = 0.75f),
+        )
+        Spacer(Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TvButton(
+                onClick = onContinue,
+                icon = R.drawable.ic_play,
+                text = "Seguir viendo",
+                primary = true,
+                modifier = Modifier.focusRequester(focus),
+            )
+            TvButton(onClick = onExit) { Text("Salir") }
         }
     }
 }

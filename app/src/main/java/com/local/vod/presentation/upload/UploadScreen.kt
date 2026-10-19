@@ -27,7 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.vod.R
 import com.local.vod.presentation.TvButton
 import com.local.vod.presentation.formatBytes
-import com.local.vod.presentation.neonBackground
+import com.local.vod.presentation.appBackground
 import com.local.vod.presentation.screenPadding
 
 @Composable
@@ -52,7 +52,7 @@ fun UploadScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize().neonBackground().screenPadding()) {
+    Column(Modifier.fillMaxSize().appBackground().screenPadding()) {
         // Igual que el resto de pantallas: título a la izquierda y el botón a la derecha.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Subir", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))

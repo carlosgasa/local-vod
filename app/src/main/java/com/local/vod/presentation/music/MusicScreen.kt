@@ -37,7 +37,7 @@ import com.local.vod.presentation.TvButton
 import com.local.vod.presentation.TvCard
 import com.local.vod.presentation.TvIconButton
 import com.local.vod.presentation.formatTime
-import com.local.vod.presentation.neonBackground
+import com.local.vod.presentation.appBackground
 import com.local.vod.presentation.screenPadding
 
 @Composable
@@ -47,7 +47,7 @@ fun MusicScreen(onBack: () -> Unit, viewModel: MusicViewModel = hiltViewModel())
     val playing = state.albums.firstOrNull { it.id == state.playingAlbumId }
     val track = playing?.tracks?.getOrNull(state.trackIndex)
 
-    Column(Modifier.fillMaxSize().neonBackground().screenPadding()) {
+    Column(Modifier.fillMaxSize().appBackground().screenPadding()) {
         // Mismo orden que en fotos y en la pantalla principal: título a la izquierda, botón a la derecha.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(

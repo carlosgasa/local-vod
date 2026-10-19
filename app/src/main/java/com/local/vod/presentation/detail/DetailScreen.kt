@@ -47,9 +47,15 @@ import com.local.vod.domain.model.TitleLists
 import com.local.vod.domain.usecase.MarkWatched
 import com.local.vod.presentation.formatDuration
 import com.local.vod.presentation.formatTime
-import com.local.vod.presentation.neonBackground
+import com.local.vod.presentation.appBackground
 import com.local.vod.presentation.screenPadding
 import com.local.vod.presentation.home.Poster
+import com.local.vod.presentation.home.titleMeta
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.LaunchedEffect
 
 @Composable
@@ -60,6 +66,8 @@ fun DetailScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var asking by remember { mutableStateOf<Episode?>(null) }
+    var selectedSeason by remember { mutableStateOf<Int?>(null) }
+    var hideWatched by remember { mutableStateOf(false) }
     val title = state.title
 
     fun open(episode: Episode) {
@@ -69,56 +77,68 @@ fun DetailScreen(
         if (resumable) asking = episode else onPlay(episode.id, 0L)
     }
 
-    // En pantallas estrechas queda más espacio para los botones con una carátula pequeña.
+    // En pantallas estrechas los botones van uno debajo de otro y las miniaturas encogen.
     val compact = LocalConfiguration.current.screenWidthDp < 900
-    val posterWidth = if (compact) 110.dp else 220.dp
 
     Box(
         Modifier
             .fillMaxSize()
-            .neonBackground(intensity = 0.7f)
+            .appBackground(intensity = 0.5f)
             .screenPadding(),
     ) {
         when {
             state.error != null -> Text("Error: ${state.error}")
             title == null -> Text("Cargando…")
-            else -> Row {
-                Column(Modifier.width(posterWidth)) {
-                    Poster(title.posterUrl, title.name, Modifier.width(posterWidth).aspectRatio(2f / 3f))
-                }
-                Spacer(Modifier.width(if (compact) 16.dp else 32.dp))
-                Column(Modifier.fillMaxSize()) {
-                    Text(title.name, style = MaterialTheme.typography.headlineMedium)
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        if (title.isMovie) "Película" else "Serie · ${title.seasons.size} temporada(s)",
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                    Spacer(Modifier.height(20.dp))
-                    ListButtons(state.lists, title.id, viewModel::toggle)
-                    Spacer(Modifier.height(16.dp))
-
-                    if (title.isMovie) {
-                        val movie = title.episodes.firstOrNull()
-                        if (movie != null) MovieActions(movie, state.progress[movie.id], viewModel, onPlay, compact)
-                    } else {
-                        val next = state.next
-                        if (next != null) {
-                            val (episode, startMs) = next
-                            val label = if (startMs > 0) {
-                                "Continuar T${episode.season}E${episode.number ?: 1} · ${formatTime(startMs)}"
-                            } else {
-                                "Ver T${episode.season}E${episode.number ?: 1}"
-                            }
-                            TvButton(
-                                onClick = { onPlay(episode.id, startMs) },
-                                icon = R.drawable.ic_play,
-                                text = label,
+            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
+                item(key = "cabecera") { Backdrop(title, compact) }
+                item(key = "acciones") {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Spacer(Modifier.height(4.dp))
+                        val episodes = title.episodes
+                        if (episodes.isNotEmpty() && episodes.all { (state.progress[it.id]?.fraction ?: 0f) >= 0.95f }) {
+                            Text(
+                                if (title.isMovie) "✓ Ya la viste" else "✓ Ya la viste completa, ${episodes.size} de ${episodes.size}",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold,
                             )
-                            Spacer(Modifier.height(16.dp))
                         }
-                        SeasonEpisodes(title.seasons, state.progress, compact, ::open, viewModel::setWatched)
+                        if (title.isMovie) {
+                            val movie = title.episodes.firstOrNull()
+                            if (movie != null) MovieActions(movie, state.progress[movie.id], viewModel, onPlay, compact)
+                        } else {
+                            val next = state.next
+                            if (next != null) {
+                                val (episode, startMs) = next
+                                val label = if (startMs > 0) {
+                                    "Continuar T${episode.season}E${episode.number ?: 1} · ${formatTime(startMs)}"
+                                } else {
+                                    "Ver T${episode.season}E${episode.number ?: 1}"
+                                }
+                                TvButton(
+                                    onClick = { onPlay(episode.id, startMs) },
+                                    icon = R.drawable.ic_play,
+                                    text = label,
+                                    primary = true,
+                                )
+                            }
+                        }
+                        ListButtons(state.lists, title.id, viewModel::toggle)
                     }
+                }
+                if (!title.isMovie) {
+                    // se abre en la temporada por la que vas, no siempre en la primera
+                    val season = selectedSeason ?: state.next?.first?.season ?: title.seasons.firstOrNull()?.number ?: 1
+                    seasonEpisodes(
+                        seasons = title.seasons,
+                        selected = season,
+                        onSelect = { selectedSeason = it },
+                        hideWatched = hideWatched,
+                        onToggleHide = { hideWatched = !hideWatched },
+                        progress = state.progress,
+                        compact = compact,
+                        onEpisode = ::open,
+                        onToggleWatched = viewModel::setWatched,
+                    )
                 }
             }
         }
@@ -134,6 +154,58 @@ fun DetailScreen(
             onRestart = { asking = null; viewModel.restart(episode.id) { onPlay(episode.id, 0L) } },
             onDismiss = { asking = null },
         )
+    }
+}
+
+/** La imagen grande de arriba con el título encima, como la ficha de cualquier app de streaming. */
+@Composable
+private fun Backdrop(title: com.local.vod.domain.model.Title, compact: Boolean) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(if (compact) 220.dp else 360.dp)
+            .clip(RoundedCornerShape(12.dp)),
+    ) {
+        Poster(title.thumbUrl ?: title.posterUrl, title.name, Modifier.fillMaxSize(), fallbackUrl = title.posterUrl)
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent))),
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f)))),
+        )
+        Row(
+            Modifier.align(Alignment.BottomStart).padding(if (compact) 16.dp else 28.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            // con carátula, se enseña pequeña al lado: el fondo es un fotograma
+            if (title.posterUrl != null && title.thumbUrl != null) {
+                Poster(
+                    title.posterUrl,
+                    title.name,
+                    Modifier
+                        .width(if (compact) 72.dp else 130.dp)
+                        .aspectRatio(2f / 3f)
+                        .clip(RoundedCornerShape(6.dp)),
+                )
+                Spacer(Modifier.width(if (compact) 12.dp else 20.dp))
+            }
+            Column {
+                Text(
+                    title.name,
+                    style = if (compact) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(titleMeta(title), color = Color.White.copy(alpha = 0.75f))
+            }
+        }
     }
 }
 
@@ -189,6 +261,7 @@ private fun MoviePlayButtons(
             onClick = { onPlay(movie.id, progress.positionMs) },
             icon = R.drawable.ic_play,
             text = "Reanudar ${formatTime(progress.positionMs)}",
+            primary = true,
         )
         TvButton(
             onClick = { viewModel.restart(movie.id) { onPlay(movie.id, 0L) } },
@@ -196,44 +269,48 @@ private fun MoviePlayButtons(
             text = "Empezar de nuevo",
         )
     } else {
-        TvButton(onClick = { onPlay(movie.id, 0L) }, icon = R.drawable.ic_play, text = "Reproducir")
+        TvButton(onClick = { onPlay(movie.id, 0L) }, icon = R.drawable.ic_play, text = "Reproducir", primary = true)
     }
 }
 
-@Composable
-private fun SeasonEpisodes(
+private fun LazyListScope.seasonEpisodes(
     seasons: List<com.local.vod.domain.model.Season>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    hideWatched: Boolean,
+    onToggleHide: () -> Unit,
     progress: Map<String, PlaybackProgress>,
     compact: Boolean,
     onEpisode: (Episode) -> Unit,
     onToggleWatched: (Episode, PlaybackProgress?) -> Unit,
 ) {
-    var selected by remember { mutableStateOf(seasons.firstOrNull()?.number ?: 1) }
-    var hideWatched by remember { mutableStateOf(false) }
-    if (seasons.size > 1) {
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(seasons, key = { it.number }) { season ->
-                TvButton(onClick = { selected = season.number }) {
-                    Text(if (season.number == selected) "▍Temporada ${season.number}" else "Temporada ${season.number}")
+    item(key = "temporadas") {
+        Column {
+            Spacer(Modifier.height(8.dp))
+            Text("Episodios", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(10.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (seasons.size > 1) {
+                    items(seasons, key = { it.number }) { season ->
+                        TvButton(onClick = { onSelect(season.number) }, primary = season.number == selected) {
+                            Text("Temporada ${season.number}")
+                        }
+                    }
+                }
+                item(key = "ocultar") {
+                    TvButton(onClick = onToggleHide) { Text(if (hideWatched) "Ver todos" else "Ocultar vistos") }
                 }
             }
         }
-        Spacer(Modifier.height(16.dp))
     }
-    TvButton(onClick = { hideWatched = !hideWatched }) {
-        Text(if (hideWatched) "Ver todos" else "Ocultar vistos")
-    }
-    Spacer(Modifier.height(8.dp))
     val episodes = seasons.firstOrNull { it.number == selected }?.episodes.orEmpty()
         .filter { !hideWatched || (progress[it.id]?.fraction ?: 0f) < 0.95f }
     if (episodes.isEmpty() && hideWatched) {
-        Text("No hay episodios pendientes")
+        item(key = "sin-pendientes") { Text("No hay episodios pendientes") }
     }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(episodes, key = { it.id }) { episode ->
-            val saved = progress[episode.id]
-            EpisodeRow(episode, saved, compact, { onEpisode(episode) }) { onToggleWatched(episode, saved) }
-        }
+    items(episodes, key = { it.id }) { episode ->
+        val saved = progress[episode.id]
+        EpisodeRow(episode, saved, compact, { onEpisode(episode) }) { onToggleWatched(episode, saved) }
     }
 }
 
@@ -247,12 +324,12 @@ private fun EpisodeRow(
 ) {
     if (compact) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            EpisodeCard(episode, progress, Modifier.fillMaxWidth(), onClick)
+            EpisodeCard(episode, progress, true, Modifier.fillMaxWidth(), onClick)
             WatchedButton(episode, progress, onToggleWatched)
         }
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            EpisodeCard(episode, progress, Modifier.weight(1f), onClick)
+            EpisodeCard(episode, progress, false, Modifier.weight(1f), onClick)
             WatchedButton(episode, progress, onToggleWatched)
         }
     }
@@ -275,12 +352,22 @@ private fun WatchedButton(episode: Episode, progress: PlaybackProgress?, onClick
 }
 
 @Composable
-private fun EpisodeCard(episode: Episode, progress: PlaybackProgress?, modifier: Modifier, onClick: () -> Unit) {
+private fun EpisodeCard(
+    episode: Episode,
+    progress: PlaybackProgress?,
+    compact: Boolean,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
     TvCard(onClick = onClick, modifier = modifier) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             // Los enlaces remotos no tienen miniatura: sin ella la fila sigue siendo solo texto.
             if (episode.thumbUrl != null) {
-                Poster(episode.thumbUrl, episode.name, Modifier.width(96.dp).aspectRatio(16f / 9f))
+                Poster(
+                    episode.thumbUrl,
+                    episode.name,
+                    Modifier.width(if (compact) 120.dp else 200.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(6.dp)),
+                )
                 Spacer(Modifier.width(12.dp))
             }
             Column(Modifier.weight(1f)) {

@@ -41,7 +41,7 @@ import com.local.vod.presentation.TvButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import com.local.vod.R
-import com.local.vod.presentation.neonBackground
+import com.local.vod.presentation.appBackground
 import com.local.vod.presentation.screenPadding
 
 @Composable
@@ -60,7 +60,7 @@ fun SetupScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .neonBackground()
+            .appBackground()
             .verticalScroll(rememberScrollState())
             .imePadding()
             .screenPadding(),

@@ -42,19 +42,40 @@ fun rememberFocusInteractionSource(): MutableInteractionSource = remember { Muta
 fun MutableInteractionSource.isFocused(): Boolean = collectIsFocusedAsState().value
 
 // Envoltorios que usan todas las pantallas: Material 3 (responde al dedo y al mando)
-// más el resalte de foco de arriba.
+// con el estilo de las apps de streaming: lo enfocado se vuelve blanco y crece un poco.
 
+private val ButtonShape = RoundedCornerShape(8.dp)
+
+@Composable
+private fun tvButtonColors(focused: Boolean, primary: Boolean) = androidx.compose.material3.ButtonDefaults.buttonColors(
+    containerColor = when {
+        focused -> Color.White
+        primary -> androidx.compose.material3.MaterialTheme.colorScheme.primary
+        else -> Color.White.copy(alpha = 0.14f)
+    },
+    contentColor = if (focused) Color.Black else Color.White,
+    disabledContainerColor = Color.White.copy(alpha = 0.06f),
+    disabledContentColor = Color.White.copy(alpha = 0.38f),
+)
+
+/** @param primary el botón principal de la pantalla (reproducir): va en el color de acento. */
 @Composable
 fun TvButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    primary: Boolean = false,
     content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
 ) {
+    val source = rememberFocusInteractionSource()
+    val focused = source.isFocused()
     androidx.compose.material3.Button(
         onClick = onClick,
-        modifier = modifier.focusHighlight(24),
+        modifier = modifier.scale(if (focused) 1.05f else 1f),
         enabled = enabled,
+        shape = ButtonShape,
+        colors = tvButtonColors(focused, primary),
+        interactionSource = source,
         content = content,
     )
 }
@@ -68,7 +89,11 @@ fun TvCard(
 ) {
     androidx.compose.material3.Card(
         onClick = onClick,
-        modifier = modifier.focusHighlight(12),
+        modifier = modifier.focusHighlight(8),
+        shape = RoundedCornerShape(8.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+        ),
         interactionSource = interactionSource,
         content = content,
     )
@@ -83,12 +108,9 @@ fun TvButton(
     text: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    primary: Boolean = false,
 ) {
-    androidx.compose.material3.Button(
-        onClick = onClick,
-        modifier = modifier.focusHighlight(24),
-        enabled = enabled,
-    ) {
+    TvButton(onClick = onClick, modifier = modifier, enabled = enabled, primary = primary) {
         androidx.compose.material3.Icon(
             painter = androidx.compose.ui.res.painterResource(icon),
             contentDescription = null,
@@ -99,7 +121,7 @@ fun TvButton(
     }
 }
 
-/** Solo icono, para la barra de arriba. Lleva descripción para el lector de pantalla. */
+/** Solo icono, para la barra de arriba: transparente hasta que se enfoca. */
 @Composable
 fun TvIconButton(
     onClick: () -> Unit,
@@ -107,14 +129,21 @@ fun TvIconButton(
     description: String,
     modifier: Modifier = Modifier,
 ) {
+    val source = rememberFocusInteractionSource()
+    val focused = source.isFocused()
     androidx.compose.material3.FilledIconButton(
         onClick = onClick,
-        modifier = modifier.focusHighlight(28),
+        modifier = modifier.scale(if (focused) 1.1f else 1f),
+        colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
+            containerColor = if (focused) Color.White else Color.Transparent,
+            contentColor = if (focused) Color.Black else Color.White,
+        ),
+        interactionSource = source,
     ) {
         androidx.compose.material3.Icon(
             painter = androidx.compose.ui.res.painterResource(icon),
             contentDescription = description,
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(24.dp),
         )
     }
 }

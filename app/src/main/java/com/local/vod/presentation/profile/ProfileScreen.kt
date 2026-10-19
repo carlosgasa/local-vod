@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -24,7 +23,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -39,9 +37,10 @@ import androidx.compose.material3.Text
 import com.local.vod.R
 import com.local.vod.domain.model.Profile
 import com.local.vod.presentation.TvButton
-import com.local.vod.presentation.neonBackground
+import com.local.vod.presentation.TvCard
+import androidx.compose.ui.text.font.FontWeight
+import com.local.vod.presentation.appBackground
 import com.local.vod.presentation.screenPadding
-import com.local.vod.presentation.focusHighlight
 
 @Composable
 fun ProfileScreen(
@@ -54,14 +53,14 @@ fun ProfileScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .neonBackground()
+            .appBackground()
             // en un celular apaisado no cabe todo: que se pueda bajar
             .verticalScroll(rememberScrollState())
             .screenPadding(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(24.dp))
-        Text("¿Quién está viendo?", style = MaterialTheme.typography.headlineMedium)
+        Text("¿Quién está viendo?", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(32.dp))
 
         when {
@@ -77,7 +76,7 @@ fun ProfileScreen(
             else -> LazyRow(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 items(state.profiles, key = { it.id }) { profile ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        ProfileAvatar(profile) {
+                        ProfileAvatar(profile, state.editing) {
                             if (state.editing) viewModel.startRename(profile) else viewModel.choose(profile, onChosen)
                         }
                         if (state.editing) {
@@ -139,29 +138,39 @@ fun ProfileScreen(
     }
 }
 
+// Cada perfil con su color, siempre el mismo: se reconoce antes de leer el nombre.
+private val AvatarColors = listOf(
+    Color(0xFFE5243B), Color(0xFF2D7FF9), Color(0xFF20B26B),
+    Color(0xFFF5A524), Color(0xFF8B5CF6), Color(0xFFEC4899),
+)
+
 @Composable
-private fun ProfileAvatar(profile: Profile, onClick: () -> Unit) {
+private fun ProfileAvatar(profile: Profile, editing: Boolean, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            Modifier
-                .size(120.dp)
-                .focusHighlight(60)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surface)
-                .let { base ->
-                    base.then(
-                        Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
-                    )
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                profile.name.take(1).uppercase(),
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
+        TvCard(onClick = onClick, modifier = Modifier.size(120.dp)) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(AvatarColors[Math.floorMod(profile.id.hashCode(), AvatarColors.size)]),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    profile.name.take(1).uppercase(),
+                    style = MaterialTheme.typography.displayMedium,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                )
+                if (editing) {
+                    Box(
+                        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Cambiar nombre", style = MaterialTheme.typography.bodySmall, color = Color.White)
+                    }
+                }
+            }
         }
-        Spacer(Modifier.height(12.dp))
-        TvButton(onClick = onClick) { Text(profile.name, maxLines = 1) }
+        Spacer(Modifier.height(10.dp))
+        Text(profile.name, style = MaterialTheme.typography.titleMedium, maxLines = 1)
     }
 }

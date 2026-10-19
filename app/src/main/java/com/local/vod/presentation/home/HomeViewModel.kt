@@ -49,6 +49,11 @@ data class HomeUiState(
     val laterTitles: List<Title> get() = lists.later.mapNotNull { id -> titles.firstOrNull { it.id == id } }
     val favoriteTitles: List<Title> get() = lists.favorites.mapNotNull { id -> titles.firstOrNull { it.id == id } }
 
+    /** Para el destacado: lo último que entró, prefiriendo lo que tiene imagen que enseñar. */
+    val heroTitles: List<Title> get() = titles
+        .sortedWith(compareByDescending<Title> { it.thumbUrl != null || it.posterUrl != null }.thenByDescending { it.addedAt })
+        .take(5)
+
     val recentTitles: List<Title> get() =
         if (titles.size > 6 && titles.any { it.addedAt > 0L }) {
             titles.sortedByDescending { it.addedAt }.take(10)

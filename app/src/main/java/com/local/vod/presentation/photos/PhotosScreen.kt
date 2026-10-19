@@ -51,7 +51,7 @@ import com.local.vod.domain.model.PhotoAlbum
 import com.local.vod.presentation.TvButton
 import com.local.vod.presentation.TvCard
 import com.local.vod.presentation.TvIconButton
-import com.local.vod.presentation.neonBackground
+import com.local.vod.presentation.appBackground
 import com.local.vod.presentation.screenPadding
 import kotlinx.coroutines.launch
 
@@ -73,7 +73,7 @@ fun PhotosScreen(onBack: () -> Unit, viewModel: PhotosViewModel = hiltViewModel(
         return
     }
 
-    Column(Modifier.fillMaxSize().neonBackground().screenPadding()) {
+    Column(Modifier.fillMaxSize().appBackground().screenPadding()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 album?.title ?: "Fotos",

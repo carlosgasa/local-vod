@@ -33,6 +33,7 @@ fun VodNavHost(sharedFiles: ShareSelection, onShareConsumed: () -> Unit) {
             HomeScreen(
                 onTitleClick = { nav.navigate(detailRoute(it.id)) },
                 onContinueClick = { item -> nav.navigate(playerRoute(item.episode.id, item.progress.positionMs)) },
+                onPlay = { episodeId, startMs -> nav.navigate(playerRoute(episodeId, startMs)) },
                 onSetupClick = { nav.navigate("setup") },
                 onUploadClick = { nav.navigate("upload") },
                 onProfileClick = { nav.navigate("profiles") },

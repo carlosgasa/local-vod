@@ -11,6 +11,9 @@ data class Title(
     val addedAt: Long = 0L,
 ) {
     val episodes: List<Episode> get() = seasons.flatMap { it.episodes }
+
+    /** Un fotograma del primer video: hace de carátula o de fondo cuando no hay otra cosa. */
+    val thumbUrl: String? get() = episodes.firstNotNullOfOrNull { it.thumbUrl }
 }
 
 data class Season(
