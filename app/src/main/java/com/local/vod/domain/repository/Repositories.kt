@@ -37,6 +37,11 @@ interface PhotoRepository {
     suspend fun albums(): List<PhotoAlbum>
 }
 
+interface LiveTvRepository {
+    /** Los canales de las listas IPTV añadidas en el panel, agrupados por categoría. */
+    suspend fun groups(): List<com.local.vod.domain.model.ChannelGroup>
+}
+
 interface MusicRepository {
     suspend fun albums(): List<MusicAlbum>
 }

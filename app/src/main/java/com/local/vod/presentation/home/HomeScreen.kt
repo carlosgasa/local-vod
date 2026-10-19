@@ -113,6 +113,7 @@ fun HomeScreen(
     onProfileClick: () -> Unit,
     onPhotosClick: () -> Unit,
     onMusicClick: () -> Unit,
+    onLiveTvClick: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -177,6 +178,12 @@ fun HomeScreen(
                 onClick = viewModel::toggleSearch,
                 icon = R.drawable.ic_search,
                 description = if (state.searchOpen) "Cerrar búsqueda" else "Buscar títulos",
+            )
+            Spacer(Modifier.width(8.dp))
+            TvIconButton(
+                onClick = onLiveTvClick,
+                icon = R.drawable.ic_tv,
+                description = "TV en vivo",
             )
             Spacer(Modifier.width(8.dp))
             TvIconButton(

@@ -32,6 +32,30 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.window.Dialog
+import androidx.media3.common.Format
+import androidx.media3.common.TrackGroup
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
+import com.local.vod.presentation.TvIconButton
+import com.local.vod.presentation.formatTime
+import java.util.Locale
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.mutableIntStateOf
@@ -119,6 +143,37 @@ fun PlayerScreen(
     var askStillWatching by remember { mutableStateOf(false) }
     // el aviso de "+10 s" del doble toque: lado (-1 o 1) y un contador para reiniciar la animación
     var seekHint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var isPlaying by remember { mutableStateOf(true) }
+    var tracks by remember { mutableStateOf(Tracks.EMPTY) }
+    // qué lista de pistas está abierta: audio o subtítulos
+    var trackDialog by remember { mutableStateOf<Int?>(null) }
+    // cada pulsación lo sube: los controles se esconden solos a los 5 s sin tocar nada
+    var interaction by remember { mutableIntStateOf(0) }
+    val rootFocus = remember { FocusRequester() }
+    val playFocus = remember { FocusRequester() }
+
+    fun showControls() {
+        controlsVisible = true
+        interaction++
+    }
+
+    fun seekBy(deltaMs: Long) {
+        if (!player.isCurrentMediaItemSeekable) return
+        val end = if (player.duration > 0) player.duration else Long.MAX_VALUE
+        player.seekTo((player.currentPosition + deltaMs).coerceIn(0L, end))
+        showControls()
+    }
+
+    LaunchedEffect(controlsVisible, interaction, isPlaying, trackDialog) {
+        if (controlsVisible && isPlaying && trackDialog == null) {
+            delay(5_000)
+            controlsVisible = false
+        }
+    }
+    // Con controles: el foco al botón de pausa. Sin ellos: a la pantalla, que recoge las flechas.
+    LaunchedEffect(controlsVisible) {
+        runCatching { if (controlsVisible) playFocus.requestFocus() else rootFocus.requestFocus() }
+    }
 
     LaunchedEffect(player) {
         while (true) {
@@ -142,6 +197,14 @@ fun PlayerScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(player) {
         val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+            }
+
+            override fun onTracksChanged(newTracks: Tracks) {
+                tracks = newTracks
+            }
+
             override fun onPlayerError(error: PlaybackException) {
                 failure = error.friendlyMessage()
             }
@@ -191,24 +254,55 @@ fun PlayerScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
-        // PlayerView trae el manejo del mando, los botones de anterior/siguiente episodio
-        // y el menú de pistas de audio y subtítulos.
+    val index = current.episodes.indexOfFirst { it.id == tick.mediaId }
+    val next = current.episodes.getOrNull(index + 1)
+    val remainingMs = if (tick.durationMs > 0) tick.durationMs - tick.positionMs else Long.MAX_VALUE
+    val nextPromptVisible = failure == null && next != null && !cancelled && remainingMs in 0..NEXT_PROMPT_MS
+    // con un aviso en pantalla, sus botones mandan: las flechas no se tocan
+    val panelOpen = askStillWatching || failure != null || nextPromptVisible || trackDialog != null
+
+    BackHandler(enabled = controlsVisible && !panelOpen) { controlsVisible = false }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusRequester(rootFocus)
+            .focusable()
+            // El mando: los botones multimedia siempre; con los controles escondidos, izquierda
+            // y derecha saltan 10 s y cualquier otra tecla los saca.
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                interaction++
+                when (event.key) {
+                    Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
+                        if (player.isPlaying) player.pause() else player.play()
+                        showControls()
+                        true
+                    }
+                    Key.MediaFastForward -> { seekBy(SEEK_STEP_MS); true }
+                    Key.MediaRewind -> { seekBy(-SEEK_STEP_MS); true }
+                    Key.MediaNext -> { if (player.hasNextMediaItem()) player.seekToNextMediaItem(); true }
+                    Key.MediaPrevious -> { player.seekToPrevious(); true }
+                    else -> when {
+                        controlsVisible || panelOpen -> false
+                        event.key == Key.DirectionLeft -> { seekBy(-SEEK_STEP_MS); true }
+                        event.key == Key.DirectionRight -> { seekBy(SEEK_STEP_MS); true }
+                        event.key == Key.Back -> false
+                        else -> { showControls(); true }
+                    }
+                }
+            },
+    ) {
+        // PlayerView solo pinta el video y los subtítulos: los controles son nuestros,
+        // pensados para el mando (todo enfocable) y para el dedo.
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     this.player = player
-                    setShowSubtitleButton(true)
-                    setShowNextButton(true)
-                    setShowPreviousButton(true)
-                    controllerShowTimeoutMs = 8_000
-                    setControllerVisibilityListener(
-                        PlayerView.ControllerVisibilityListener { visibility ->
-                            controlsVisible = visibility == View.VISIBLE
-                        },
-                    )
-                    requestFocus()
+                    useController = false
+                    isFocusable = false
                     playerView = this
                 }
             },
@@ -222,7 +316,7 @@ fun PlayerScreen(
                     .fillMaxSize()
                     .pointerInput(player) {
                         detectTapGestures(
-                            onTap = { playerView?.showController() },
+                            onTap = { showControls() },
                             onDoubleTap = { offset ->
                                 val side = if (offset.x < size.width / 2) -1 else 1
                                 val target = player.currentPosition + side * SEEK_STEP_MS
@@ -250,8 +344,34 @@ fun PlayerScreen(
             )
         }
 
-        val index = current.episodes.indexOfFirst { it.id == tick.mediaId }
         val playing = current.episodes.getOrNull(index)
+        if (controlsVisible && !panelOpen) {
+            // tocar fuera de los botones los esconde
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .pointerInput(Unit) { detectTapGestures(onTap = { controlsVisible = false }) },
+            )
+            PlayerControls(
+                positionMs = tick.positionMs,
+                durationMs = tick.durationMs,
+                isPlaying = isPlaying,
+                hasPrevious = index > 0,
+                hasNext = next != null,
+                hasAudioChoice = tracks.choices(C.TRACK_TYPE_AUDIO).size > 1,
+                hasSubtitles = tracks.choices(C.TRACK_TYPE_TEXT).isNotEmpty(),
+                playFocus = playFocus,
+                onPlayPause = { if (player.isPlaying) player.pause() else player.play(); interaction++ },
+                onSeekBy = ::seekBy,
+                onSeekTo = { player.seekTo(it); interaction++ },
+                onPrevious = { player.seekToPreviousMediaItem() },
+                onNext = { player.seekToNextMediaItem() },
+                onAudio = { trackDialog = C.TRACK_TYPE_AUDIO },
+                onSubtitles = { trackDialog = C.TRACK_TYPE_TEXT },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
         if (controlsVisible && playing != null) {
             Column(
                 Modifier
@@ -277,9 +397,6 @@ fun PlayerScreen(
             }
         }
 
-        val next = current.episodes.getOrNull(index + 1)
-        val remainingMs = if (tick.durationMs > 0) tick.durationMs - tick.positionMs else Long.MAX_VALUE
-
         if (failure != null) {
             PlaybackErrorPanel(
                 message = failure!!,
@@ -303,7 +420,27 @@ fun PlayerScreen(
             )
         }
 
-        if (failure == null && next != null && !cancelled && remainingMs in 0..NEXT_PROMPT_MS) {
+        trackDialog?.let { type ->
+            TrackDialog(
+                type = type,
+                choices = tracks.choices(type),
+                subtitlesOff = player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT),
+                onPick = { choice ->
+                    val params = player.trackSelectionParameters.buildUpon()
+                    player.trackSelectionParameters = if (choice == null) {
+                        params.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+                    } else {
+                        params.setTrackTypeDisabled(type, false)
+                            .setOverrideForType(TrackSelectionOverride(choice.group, choice.index))
+                            .build()
+                    }
+                    trackDialog = null
+                },
+                onDismiss = { trackDialog = null },
+            )
+        }
+
+        if (nextPromptVisible && next != null) {
             NextEpisodePrompt(
                 next = next,
                 secondsLeft = (remainingMs / 1000).toInt(),
@@ -315,6 +452,183 @@ fun PlayerScreen(
                 },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(40.dp),
             )
+        }
+    }
+}
+
+/** Una pista que se puede elegir: su grupo, su posición en él y cómo llamarla. */
+private data class TrackChoice(val group: TrackGroup, val index: Int, val label: String, val selected: Boolean)
+
+@AndroidXOptIn(UnstableApi::class)
+private fun Tracks.choices(type: Int): List<TrackChoice> = groups
+    .filter { it.type == type }
+    .flatMap { group ->
+        (0 until group.length).filter { group.isTrackSupported(it) }.map { i ->
+            TrackChoice(group.mediaTrackGroup, i, trackLabel(group.getTrackFormat(i)), group.isTrackSelected(i))
+        }
+    }
+
+/** "Español · 5.1" a partir del idioma y los canales; si el archivo trae nombre, ese. */
+private fun trackLabel(format: Format): String {
+    val language = format.language?.let { code ->
+        Locale.forLanguageTag(code).getDisplayLanguage(Locale("es")).replaceFirstChar { it.uppercase() }
+            .takeIf { it.isNotBlank() && it != code }
+    }
+    val channels = when (format.channelCount) {
+        1 -> "mono"
+        2 -> "estéreo"
+        6 -> "5.1"
+        8 -> "7.1"
+        else -> null
+    }
+    val base = format.label ?: language ?: "Pista"
+    return listOfNotNull(base, channels?.takeIf { format.label == null }).joinToString(" · ")
+}
+
+@Composable
+private fun PlayerControls(
+    positionMs: Long,
+    durationMs: Long,
+    isPlaying: Boolean,
+    hasPrevious: Boolean,
+    hasNext: Boolean,
+    hasAudioChoice: Boolean,
+    hasSubtitles: Boolean,
+    playFocus: FocusRequester,
+    onPlayPause: () -> Unit,
+    onSeekBy: (Long) -> Unit,
+    onSeekTo: (Long) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onAudio: () -> Unit,
+    onSubtitles: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val live = durationMs <= 0
+    Column(
+        modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
+            .padding(horizontal = 40.dp, vertical = 24.dp),
+    ) {
+        if (live) {
+            Text(
+                "● EN VIVO",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.titleMedium,
+            )
+        } else {
+            SeekBar(positionMs, durationMs, onSeekBy, onSeekTo)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "${formatTime(positionMs)} / ${formatTime(durationMs)}",
+                color = Color.White.copy(alpha = 0.8f),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (hasPrevious) TvIconButton(onClick = onPrevious, icon = R.drawable.ic_skip_previous, description = "Episodio anterior")
+            if (!live) TvIconButton(onClick = { onSeekBy(-SEEK_STEP_MS) }, icon = R.drawable.ic_rewind, description = "Atrás 10 segundos")
+            TvIconButton(
+                onClick = onPlayPause,
+                icon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
+                description = if (isPlaying) "Pausa" else "Reproducir",
+                modifier = Modifier.focusRequester(playFocus),
+            )
+            if (!live) TvIconButton(onClick = { onSeekBy(SEEK_STEP_MS) }, icon = R.drawable.ic_forward, description = "Adelante 10 segundos")
+            if (hasNext) TvIconButton(onClick = onNext, icon = R.drawable.ic_skip_next, description = "Siguiente episodio")
+            Spacer(Modifier.weight(1f))
+            if (hasAudioChoice) TvButton(onClick = onAudio) { Text("Audio") }
+            if (hasSubtitles) TvButton(onClick = onSubtitles) { Text("Subtítulos") }
+        }
+    }
+}
+
+/** Barra de avance: con el mando, izquierda y derecha saltan 10 s; con el dedo, se toca o se arrastra. */
+@Composable
+private fun SeekBar(positionMs: Long, durationMs: Long, onSeekBy: (Long) -> Unit, onSeekTo: (Long) -> Unit) {
+    val source = remember { MutableInteractionSource() }
+    val focused by source.collectIsFocusedAsState()
+    val fraction = (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .focusable(interactionSource = source)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> { onSeekBy(-SEEK_STEP_MS); true }
+                    Key.DirectionRight -> { onSeekBy(SEEK_STEP_MS); true }
+                    else -> false
+                }
+            }
+            .pointerInput(durationMs) {
+                detectTapGestures { offset -> onSeekTo((offset.x / size.width * durationMs).toLong()) }
+            }
+            .pointerInput(durationMs) {
+                detectHorizontalDragGestures { change, _ ->
+                    onSeekTo((change.position.x / size.width).coerceIn(0f, 1f).times(durationMs).toLong())
+                }
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        val barHeight = if (focused) 8.dp else 4.dp
+        Box(Modifier.fillMaxWidth().height(barHeight).background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(4.dp)))
+        Box(
+            Modifier
+                .fillMaxWidth(fraction)
+                .height(barHeight)
+                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp)),
+        )
+        // el punto que marca dónde vas: crece cuando la barra tiene el foco
+        Box(Modifier.fillMaxWidth(fraction), contentAlignment = Alignment.CenterEnd) {
+            Box(
+                Modifier
+                    .size(if (focused) 20.dp else 12.dp)
+                    .background(Color.White, RoundedCornerShape(50)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrackDialog(
+    type: Int,
+    choices: List<TrackChoice>,
+    subtitlesOff: Boolean,
+    onPick: (TrackChoice?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val subtitles = type == C.TRACK_TYPE_TEXT
+    // la opción marcada es la que tiene el foco al abrir
+    val selectedIndex = when {
+        subtitles && (subtitlesOff || choices.none { it.selected }) -> -1
+        else -> choices.indexOfFirst { it.selected }.coerceAtLeast(0)
+    }
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(12.dp)) {
+            Column(Modifier.padding(24.dp).widthIn(min = 280.dp).verticalScroll(rememberScrollState())) {
+                Text(if (subtitles) "Subtítulos" else "Audio", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(16.dp))
+                if (subtitles) {
+                    TvButton(
+                        onClick = { onPick(null) },
+                        modifier = Modifier.fillMaxWidth().let { if (selectedIndex == -1) it.focusRequester(focus) else it },
+                    ) { Text(if (selectedIndex == -1) "✓  Desactivados" else "Desactivados") }
+                    Spacer(Modifier.height(8.dp))
+                }
+                choices.forEachIndexed { i, choice ->
+                    TvButton(
+                        onClick = { onPick(choice) },
+                        modifier = Modifier.fillMaxWidth().let { if (i == selectedIndex) it.focusRequester(focus) else it },
+                    ) { Text(if (i == selectedIndex) "✓  ${choice.label}" else choice.label) }
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
         }
     }
 }
@@ -431,6 +745,8 @@ private fun NextEpisodePrompt(
 private fun Episode.toMediaItem(): MediaItem = MediaItem.Builder()
     .setUri(url)
     .setMediaId(id)
+    // muchos canales en vivo son HLS aunque la dirección no acabe en .m3u8
+    .apply { if (url.contains(".m3u8", ignoreCase = true)) setMimeType(MimeTypes.APPLICATION_M3U8) }
     .setSubtitleConfigurations(
         subs.map { sub ->
             MediaItem.SubtitleConfiguration.Builder(sub.url.toUri())

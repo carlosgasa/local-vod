@@ -95,6 +95,23 @@
   <div id="links" style="margin-top:12px"></div>
 </div>
 
+<h2>TV en vivo</h2>
+<div class="card">
+  <p class="small" style="margin:0 0 10px">
+    Listas de canales gratuitos (<code>.m3u</code>). Salen en la app, en <b>TV en vivo</b>, agrupados
+    por categoría. Las de un clic son de <a href="https://github.com/iptv-org/iptv" target="_blank">iptv-org</a>;
+    también puedes pegar la dirección de cualquier otra lista. Algunos canales dejan de emitir de vez
+    en cuando: es normal en las listas gratuitas.
+  </p>
+  <div id="iptvPresets" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+  <div>
+    <input type="text" id="iptvName" placeholder="Nombre (opcional)" maxlength="80">
+    <input type="text" id="iptvUrl" placeholder="https://…/lista.m3u" style="width:360px">
+    <button onclick="addPlaylist()">Añadir lista</button>
+  </div>
+  <div id="iptvLists" style="margin-top:12px"></div>
+</div>
+
 <h2>Contenido detectado</h2>
 <div id="library"></div>
 
@@ -265,6 +282,51 @@ async function loadDuplicates() {
     : '<span class="dim">No se detectaron archivos repetidos.</span>';
 }
 
+// Listas de iptv-org: por país, por categoría o la mundial entera (son miles de canales).
+const IPTV_BASE = 'https://iptv-org.github.io/iptv/';
+const IPTV_PRESETS = [
+  ['México', 'countries/mx.m3u'], ['España', 'countries/es.m3u'], ['Argentina', 'countries/ar.m3u'],
+  ['Colombia', 'countries/co.m3u'], ['Estados Unidos', 'countries/us.m3u'],
+  ['En español', 'languages/spa.m3u'], ['Noticias', 'categories/news.m3u'],
+  ['Películas', 'categories/movies.m3u'], ['Infantil', 'categories/kids.m3u'],
+  ['Música', 'categories/music.m3u'], ['Deportes', 'categories/sports.m3u'],
+  ['Todo el mundo (muy grande)', 'index.m3u'],
+];
+
+async function loadPlaylists() {
+  const { playlists, groups } = await (await fetch('/api/iptv')).json();
+  const added = new Set(playlists.map(p => p.url));
+  $('iptvPresets').innerHTML = IPTV_PRESETS.map(([name, path]) => {
+    const url = IPTV_BASE + path;
+    return added.has(url) ? `<button disabled>✓ ${esc(name)}</button>`
+      : `<button data-name="${esc(name)}" data-url="${esc(url)}" onclick="addPlaylist(this.dataset.name, this.dataset.url)">+ ${esc(name)}</button>`;
+  }).join('');
+  const total = groups.reduce((n, g) => n + g.channels.length, 0);
+  $('iptvLists').innerHTML = playlists.length ? playlists.map(p => `
+    <div class="file"><span>${esc(p.name)} <span class="dim">· ${esc(p.url)}${
+      p.only ? ' · solo: ' + esc(p.only.join(', ')) : ''}${p.exclude ? ' · sin: ' + esc(p.exclude.join(', ')) : ''}</span></span>
+      <button data-url="${esc(encodeURIComponent(p.url))}" onclick="deletePlaylist(decodeURIComponent(this.dataset.url))">Quitar</button>
+    </div>`).join('') + `<div class="dim" style="margin-top:8px">${total} canales en ${groups.length} categorías.</div>`
+    : '<span class="dim">Sin listas todavía.</span>';
+}
+
+async function addPlaylist(name, url) {
+  url = url || $('iptvUrl').value.trim();
+  if (!url) return;
+  name = name || $('iptvName').value.trim();
+  $('iptvLists').innerHTML = '<span class="dim">Descargando la lista…</span>';
+  const response = await fetch('/api/iptv', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, url }) });
+  if (!response.ok) { alert((await response.json()).error || 'No se pudo añadir'); }
+  $('iptvName').value = $('iptvUrl').value = '';
+  loadPlaylists();
+}
+
+async function deletePlaylist(url) {
+  if (!confirm('¿Quitar esta lista de canales?')) return;
+  await fetch('/api/iptv/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+  loadPlaylists();
+}
+
 async function loadLinks() {
   const { links } = await (await fetch('/api/links')).json();
   $('links').innerHTML = links.length ? links.map(l => `
@@ -323,7 +385,7 @@ function uploadOne(file) {
   request.send(file);
 }
 
-loadJobs().then(loadProfiles).then(loadLinks).then(load);
+loadJobs().then(loadProfiles).then(loadLinks).then(load).then(loadPlaylists);
 </script>
 </body>
 </html>

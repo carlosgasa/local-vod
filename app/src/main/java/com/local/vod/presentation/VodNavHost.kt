@@ -16,9 +16,11 @@ import com.local.vod.presentation.photos.PhotosScreen
 import com.local.vod.presentation.profile.ProfileScreen
 import com.local.vod.presentation.setup.SetupScreen
 import com.local.vod.presentation.upload.UploadScreen
+import com.local.vod.presentation.tv.LiveTvScreen
 
 // Los ids son rutas de archivo (con barras y espacios): van como query, no como path.
 private fun detailRoute(titleId: String) = "detail?titleId=${Uri.encode(titleId)}"
+private fun liveRoute(url: String, name: String) = "live?liveUrl=${Uri.encode(url)}&liveName=${Uri.encode(name)}"
 private fun playerRoute(episodeId: String, startMs: Long) =
     "player?episodeId=${Uri.encode(episodeId)}&startMs=$startMs"
 
@@ -39,6 +41,7 @@ fun VodNavHost(sharedFiles: ShareSelection, onShareConsumed: () -> Unit) {
                 onProfileClick = { nav.navigate("profiles") },
                 onPhotosClick = { nav.navigate("photos") },
                 onMusicClick = { nav.navigate("music") },
+                onLiveTvClick = { nav.navigate("tv") },
             )
         }
         composable("photos") {
@@ -46,6 +49,18 @@ fun VodNavHost(sharedFiles: ShareSelection, onShareConsumed: () -> Unit) {
         }
         composable("profiles") {
             ProfileScreen(onChosen = { nav.popBackStack() }, onSetup = { nav.navigate("setup") })
+        }
+        composable("tv") {
+            LiveTvScreen(onChannel = { nav.navigate(liveRoute(it.url, it.name)) }, onBack = { nav.popBackStack() })
+        }
+        composable(
+            route = "live?liveUrl={liveUrl}&liveName={liveName}",
+            arguments = listOf(
+                navArgument("liveUrl") { type = NavType.StringType },
+                navArgument("liveName") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) {
+            PlayerScreen(onBack = { nav.popBackStack() })
         }
         composable("music") {
             MusicScreen(onBack = { nav.popBackStack() })

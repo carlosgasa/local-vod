@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -17,6 +18,8 @@ class MainActivity : ComponentActivity() {
     private var sharedFiles by mutableStateOf(ShareSelection())
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // la pantalla de arranque (ícono sobre fondo oscuro) hasta que se pinta el primer fotograma
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         receiveShare(intent)
         setContent {

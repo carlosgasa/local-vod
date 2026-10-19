@@ -67,6 +67,8 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
     implementation(libs.media3.ffmpeg)
+    implementation(libs.media3.hls)
+    implementation(libs.androidx.core.splashscreen)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

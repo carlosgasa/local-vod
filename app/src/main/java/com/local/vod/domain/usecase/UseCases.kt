@@ -88,6 +88,10 @@ class SyncProgress @Inject constructor(private val progress: ProgressRepository)
     suspend operator fun invoke() = progress.sync()
 }
 
+class GetChannelGroups @Inject constructor(private val liveTv: com.local.vod.domain.repository.LiveTvRepository) {
+    suspend operator fun invoke() = liveTv.groups()
+}
+
 class GetProfiles @Inject constructor(private val profiles: ProfileRepository) {
     suspend operator fun invoke(): List<Profile> = profiles.available()
 }

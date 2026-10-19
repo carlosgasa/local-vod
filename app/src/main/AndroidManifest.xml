@@ -30,6 +30,7 @@
 
         <activity
             android:name=".presentation.MainActivity"
+            android:theme="@style/Theme.LocalVod.Starting"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true"
             android:launchMode="singleTop">

@@ -421,6 +421,47 @@ def test_mosaic(tmp):
     print("mosaico OK")
 
 
+def test_iptv(tmp):
+    m3u = """#EXTM3U
+#EXTINF:-1 tvg-id="a" tvg-logo="https://logo/a.png" group-title="News;General",Canal 1, Noticias
+https://stream/a.m3u8
+#EXTINF:-1 tvg-logo="" group-title="",Sin grupo
+http://stream/b.m3u8
+#EXTINF:-1,Con EXTGRP
+#EXTGRP:Sports
+https://stream/c.m3u8
+#EXTINF:-1,Roto
+rtmp://no-se-puede/d
+"""
+    channels = server.parse_m3u(m3u)
+    assert [c["name"] for c in channels] == ["Canal 1, Noticias", "Sin grupo", "Con EXTGRP"], channels
+    assert channels[0]["logo"] == "https://logo/a.png" and channels[0]["group"] == "Noticias"
+    assert channels[1]["logo"] is None and channels[1]["group"] == "Otros"
+    assert channels[2]["group"] == "Deportes"
+
+    # dos listas con un canal repetido: sale una vez; sin red, tira de la copia guardada
+    server.IPTV_FILE = Path(tmp) / "iptv.json"
+    lists = {"https://a/lista.m3u": m3u, "https://b/otra.m3u": "#EXTINF:-1,Canal 1\nhttps://stream/a.m3u8\n"}
+    for url, text in lists.items():
+        assert server.add_playlist("", url)["name"] == url.rsplit("/", 1)[-1]
+        server.iptv_cache_file(url).parent.mkdir(parents=True, exist_ok=True)
+        server.iptv_cache_file(url).write_text(text)
+    assert server.add_playlist("x", "ftp://no") is None
+    data = server.iptv()
+    names = [g["name"] for g in data["groups"]]
+    assert names == ["Deportes", "Noticias", "Otros"], names
+    assert sum(len(g["channels"]) for g in data["groups"]) == 3
+    # filtros por categoría: solo las que interesan, o todas menos algunas
+    server.add_playlist("", "https://a/lista.m3u", only=["Deportes"])
+    # el canal repetido llega primero por la otra lista, que no lo filtra (y allí va sin categoría)
+    assert [g["name"] for g in server.iptv()["groups"]] == ["Deportes", "Otros"]
+    server.add_playlist("", "https://a/lista.m3u", exclude=["Otros", "Deportes"])
+    assert [g["name"] for g in server.iptv()["groups"]] == ["Otros"]
+    server.delete_playlist("https://b/otra.m3u")
+    assert [p["url"] for p in server.load_iptv()] == ["https://a/lista.m3u"]
+    print("iptv OK")
+
+
 def test_convert_plan():
     """El orden importa: copiar es instantaneo, el chip rapido, la CPU el ultimo recurso."""
     plan = server.convert_plan(Path("a.mkv"), Path("a.mp4"), "h264", hardware=True)
@@ -456,6 +497,7 @@ if __name__ == "__main__":
         assert server.link_items()[0]["preview"] is None
         test_convert_plan()
         test_mosaic(tmp)
+        test_iptv(tmp)
         # un video suelto en la raiz llega a preview_source como si fuera carpeta
         suelto = root / "suelto.mkv"
         suelto.write_bytes(b"x" * 16)

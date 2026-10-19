@@ -16,6 +16,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -252,6 +253,148 @@ def link_items():
             "seasons": [{"number": 1, "episodes": [episode]}],
         })
     return items
+
+
+# ---------------------------------------------------------------- TV en vivo
+
+# Listas IPTV (.m3u) que se añaden desde el panel. El servidor las descarga y las
+# trocea en canales; los aparatos ven los canales ya agrupados y abren el stream
+# directamente, sin pasar por aquí. Se guarda una copia por si un día no hay internet.
+IPTV_CACHE_SECONDS = 6 * 3600
+_iptv_memory = {}  # url -> (cuándo, canales)
+_iptv_lock = threading.Lock()
+
+EXTINF_ATTR = re.compile(r'([\w-]+)="([^"]*)"')
+# las categorías de iptv-org vienen en inglés
+GROUP_NAMES = {
+    "animation": "Animación", "auto": "Motor", "business": "Negocios", "classic": "Clásicos",
+    "comedy": "Comedia", "cooking": "Cocina", "culture": "Cultura", "documentary": "Documentales",
+    "education": "Educación", "entertainment": "Entretenimiento", "family": "Familia",
+    "general": "General", "kids": "Infantil", "legislative": "Gobierno", "lifestyle": "Estilo de vida",
+    "movies": "Películas", "music": "Música", "news": "Noticias", "outdoor": "Naturaleza",
+    "relax": "Relax", "religious": "Religión", "science": "Ciencia", "series": "Series",
+    "shop": "Compras", "sports": "Deportes", "travel": "Viajes", "weather": "Clima",
+    "undefined": "Otros",
+}
+
+
+def group_name(raw):
+    raw = raw.strip()
+    return GROUP_NAMES.get(raw.lower(), raw) or "Otros"
+
+
+def parse_m3u(text):
+    channels, info = [], None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("#EXTINF"):
+            attrs = dict(EXTINF_ATTR.findall(line))
+            # el nombre va tras la primera coma fuera de comillas (el nombre puede llevar comas)
+            bare = re.sub(r'"[^"]*"', "", line)
+            name = bare.split(",", 1)[1].strip() if "," in bare else ""
+            info = {
+                "name": name or attrs.get("tvg-name") or "Canal",
+                "logo": attrs.get("tvg-logo") or None,
+                # iptv-org pone varias categorías separadas por ';': basta la primera
+                "group": group_name((attrs.get("group-title") or "").split(";")[0]),
+            }
+        elif line.startswith("#EXTGRP:") and info is not None:
+            info["group"] = group_name(line[8:]) if line[8:].strip() else info["group"]
+        elif line and not line.startswith("#"):
+            if line.startswith(("http://", "https://")):
+                channels.append(dict(info or {"name": line.rsplit("/", 1)[-1], "logo": None, "group": "Otros"},
+                                     url=line))
+            info = None
+    return channels
+
+
+def load_iptv():
+    try:
+        return json.loads(IPTV_FILE.read_text())
+    except (OSError, ValueError):
+        return []
+
+
+def save_iptv(playlists):
+    IPTV_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = IPTV_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(playlists, indent=1, ensure_ascii=False))
+    tmp.replace(IPTV_FILE)
+
+
+def add_playlist(name, url, only=None, exclude=None):
+    """only / exclude: categorías (ya traducidas) que se quedan o se quitan de esa lista.
+    Las listas grandes traen de todo; así se queda solo lo que interesa."""
+    url = (url or "").strip()
+    if not url.startswith(("http://", "https://")):
+        return None
+    clean = lambda groups: [g.strip() for g in groups or [] if isinstance(g, str) and g.strip()]
+    with _state_lock:
+        playlists = [p for p in load_iptv() if p.get("url") != url]
+        playlist = {"name": (name or "").strip() or url.rsplit("/", 1)[-1], "url": url,
+                    "addedAt": int(time.time() * 1000)}
+        if clean(only):
+            playlist["only"] = clean(only)
+        if clean(exclude):
+            playlist["exclude"] = clean(exclude)
+        playlists.append(playlist)
+        save_iptv(playlists)
+    return playlist
+
+
+def delete_playlist(url):
+    with _state_lock:
+        save_iptv([p for p in load_iptv() if p.get("url") != url])
+    with _iptv_lock:
+        _iptv_memory.pop(url, None)
+    return True
+
+
+def iptv_cache_file(url):
+    return STATE_FILE.parent / "iptv" / (hashlib.sha256(url.encode()).hexdigest() + ".m3u")
+
+
+def playlist_channels(url, refresh=False):
+    with _iptv_lock:
+        cached = _iptv_memory.get(url)
+    if cached and not refresh and time.time() - cached[0] < IPTV_CACHE_SECONDS:
+        return cached[1]
+    cache = iptv_cache_file(url)
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "LocalVOD"})
+        with urllib.request.urlopen(request, timeout=20) as response:
+            text = response.read().decode("utf-8", errors="ignore")
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(text)
+    except (OSError, ValueError):
+        # sin internet o la lista caída: lo último que se bajó
+        try:
+            text = cache.read_text()
+        except OSError:
+            return []
+    channels = parse_m3u(text)
+    with _iptv_lock:
+        _iptv_memory[url] = (time.time(), channels)
+    return channels
+
+
+def iptv(refresh=False):
+    """Canales de todas las listas, agrupados por categoría y sin repetir streams."""
+    playlists = load_iptv()
+    groups, seen = {}, set()
+    for playlist in playlists:
+        only, exclude = set(playlist.get("only") or []), set(playlist.get("exclude") or [])
+        for channel in playlist_channels(playlist["url"], refresh):
+            if channel["url"] in seen or (only and channel["group"] not in only) or channel["group"] in exclude:
+                continue
+            seen.add(channel["url"])
+            groups.setdefault(channel["group"], []).append(dict(channel, id=channel["url"]))
+    ordered = sorted(groups.items(), key=lambda kv: (kv[0] == "Otros", natkey(kv[0])))
+    return {
+        "playlists": playlists,
+        "groups": [{"name": name, "channels": sorted(chs, key=lambda c: natkey(c["name"]))}
+                   for name, chs in ordered],
+    }
 
 
 # ---------------------------------------------------------------- escaneo
@@ -674,6 +817,7 @@ def start_conversion(source):
 
 DURATIONS_FILE = STATE_FILE.parent / "durations.json"
 LINKS_FILE = STATE_FILE.parent / "links.json"
+IPTV_FILE = STATE_FILE.parent / "iptv.json"
 _durations_lock = threading.Lock()
 _scanning_durations = False
 _scanning_thumbs = False
@@ -1251,6 +1395,9 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(urlparse(self.path).query)
             profile_id = (query.get("profile") or [""])[0]
             return self.send_json({"items": progress_of(profile_id)})
+        if path == "/api/iptv":
+            refresh = (parse_qs(urlparse(self.path).query).get("refresh") or [""])[0] == "1"
+            return self.send_json(iptv(refresh))
         if path == "/api/lists":
             profile_id = (parse_qs(urlparse(self.path).query).get("profile") or [""])[0]
             return self.send_json(lists_of(profile_id))
@@ -1350,6 +1497,14 @@ class Handler(BaseHTTPRequestHandler):
                                   200 if link else 400)
         if path == "/api/links/delete":
             delete_link(body.get("url"))
+            return self.send_json({"ok": True})
+
+        if path == "/api/iptv":
+            playlist = add_playlist(body.get("name"), body.get("url"), body.get("only"), body.get("exclude"))
+            return self.send_json(playlist or {"error": "la dirección debe empezar por http:// o https://"},
+                                  200 if playlist else 400)
+        if path == "/api/iptv/delete":
+            delete_playlist(body.get("url"))
             return self.send_json({"ok": True})
 
         if path == "/api/lists":

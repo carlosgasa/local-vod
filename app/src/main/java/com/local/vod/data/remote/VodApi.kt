@@ -8,6 +8,8 @@ import com.local.vod.domain.model.Profile
 import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.model.Title
 import com.local.vod.domain.model.TitleLists
+import com.local.vod.domain.model.Channel
+import com.local.vod.domain.model.ChannelGroup
 import com.local.vod.domain.model.PhotoAlbum
 import com.local.vod.domain.model.MusicAlbum
 import kotlinx.coroutines.Dispatchers
@@ -58,6 +60,21 @@ private data class NameBody(val name: String)
 
 @Serializable
 data class ListsResponse(val later: List<String> = emptyList(), val favorites: List<String> = emptyList())
+
+@Serializable
+data class LiveTvResponse(val groups: List<ChannelGroupDto> = emptyList())
+
+@Serializable
+data class ChannelGroupDto(val name: String = "", val channels: List<ChannelDto> = emptyList())
+
+@Serializable
+data class ChannelDto(
+    val id: String = "",
+    val name: String = "",
+    val logo: String? = null,
+    val url: String = "",
+    val group: String = "",
+)
 
 @Serializable
 private data class SetInListBody(val profile: String, val list: String, val titleId: String, val on: Boolean)
@@ -189,6 +206,12 @@ class VodApi @Inject constructor(
 
     suspend fun deleteProfile(baseUrl: String, id: String) {
         post(baseUrl, "/api/profiles/delete", json.encodeToString(ProfileBody(id))) { }
+    }
+
+    suspend fun liveTv(baseUrl: String): List<ChannelGroup> = get(baseUrl, "/api/iptv") { body ->
+        json.decodeFromString<LiveTvResponse>(body).groups.map { group ->
+            ChannelGroup(group.name, group.channels.map { Channel(it.id, it.name, it.logo, it.url, it.group) })
+        }
     }
 
     suspend fun lists(baseUrl: String, profileId: String): TitleLists =
