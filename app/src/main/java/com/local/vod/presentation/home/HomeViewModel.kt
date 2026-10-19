@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.local.vod.domain.model.ContinueItem
 import com.local.vod.domain.model.Title
 import com.local.vod.domain.model.TitleLists
+import com.local.vod.domain.model.Channel
+import com.local.vod.domain.usecase.GetChannelGroups
 import com.local.vod.domain.repository.ListsRepository
 import com.local.vod.domain.repository.ProfileRepository
 import com.local.vod.domain.repository.ServerRepository
@@ -34,6 +36,7 @@ data class HomeUiState(
     val titles: List<Title> = emptyList(),
     val continueItems: List<ContinueItem> = emptyList(),
     val lists: TitleLists = TitleLists(),
+    val favoriteChannels: List<Channel> = emptyList(),
     val searchOpen: Boolean = false,
     val searchQuery: String = "",
 ) {
@@ -76,6 +79,7 @@ class HomeViewModel @Inject constructor(
     server: ServerRepository,
     profiles: ProfileRepository,
     private val lists: ListsRepository,
+    private val getChannelGroups: GetChannelGroups,
 ) : ViewModel() {
 
     val previewsEnabled = server.previewsEnabled
@@ -112,7 +116,10 @@ class HomeViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            lists.lists.collect { value -> _state.update { it.copy(lists = value) } }
+            lists.lists.collect { value ->
+                _state.update { it.copy(lists = value) }
+                loadFavoriteChannels(value.channels)
+            }
         }
         viewModelScope.launch {
             getContinueWatching()
@@ -133,6 +140,15 @@ class HomeViewModel @Inject constructor(
                     _state.update { it.copy(loading = false, error = e.message ?: "No se pudo conectar") }
                 }
         }
+    }
+
+    /** Los canales favoritos se guardan por dirección: sus nombres y logos salen de las listas. */
+    private suspend fun loadFavoriteChannels(ids: List<String>) {
+        if (ids.isEmpty()) return _state.update { it.copy(favoriteChannels = emptyList()) }
+        if (_state.value.favoriteChannels.map { it.id } == ids) return
+        val byId = runCatching { getChannelGroups() }.getOrNull()
+            ?.flatMap { it.channels }?.associateBy { it.id } ?: return
+        _state.update { it.copy(favoriteChannels = ids.mapNotNull { id -> byId[id] }) }
     }
 
     fun toggleSearch() {

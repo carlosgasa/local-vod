@@ -67,6 +67,18 @@ fun LiveTvScreen(
                 style = MaterialTheme.typography.titleMedium,
             )
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(24.dp), modifier = Modifier.fillMaxSize()) {
+                val favorites = state.favorites
+                if (favorites.isNotEmpty()) {
+                    item(key = "favoritos") {
+                        Column {
+                            Text("♥ Mis favoritos", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(10.dp))
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                items(favorites, key = { it.id }) { channel -> ChannelCard(channel) { onChannel(channel) } }
+                            }
+                        }
+                    }
+                }
                 items(state.groups, key = { it.name }) { group ->
                     Column {
                         Text(
@@ -88,7 +100,7 @@ fun LiveTvScreen(
 }
 
 @Composable
-private fun ChannelCard(channel: Channel, onClick: () -> Unit) {
+fun ChannelCard(channel: Channel, onClick: () -> Unit) {
     val width = if (LocalConfiguration.current.screenWidthDp >= 900) 200.dp else 150.dp
     Column(Modifier.width(width)) {
         TvCard(onClick = onClick, modifier = Modifier.width(width)) {

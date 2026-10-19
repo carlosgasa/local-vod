@@ -288,8 +288,9 @@ def test_state_http(tmp, root):
     assert mark("later", "Cortos")["later"] == ["Cortos", "Breaking Bad"]
     assert mark("favorites", "Breaking Bad")["favorites"] == ["Breaking Bad"]
     assert mark("later", "Breaking Bad", on=False)["later"] == ["Cortos"]
-    assert get("/api/lists?profile=" + casa["id"]) == {"later": ["Cortos"], "favorites": ["Breaking Bad"]}
-    assert get("/api/lists?profile=otro") == {"later": [], "favorites": []}
+    assert get("/api/lists?profile=" + casa["id"]) == {"later": ["Cortos"], "favorites": ["Breaking Bad"], "channels": []}
+    assert get("/api/lists?profile=otro") == {"later": [], "favorites": [], "channels": []}
+    assert mark("channels", "https://stream/a.m3u8")["channels"] == ["https://stream/a.m3u8"]
     try:
         mark("otra-lista", "Cortos")
         assert False, "una lista que no existe se rechaza"

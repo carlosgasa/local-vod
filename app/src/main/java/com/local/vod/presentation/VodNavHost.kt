@@ -42,6 +42,7 @@ fun VodNavHost(sharedFiles: ShareSelection, onShareConsumed: () -> Unit) {
                 onPhotosClick = { nav.navigate("photos") },
                 onMusicClick = { nav.navigate("music") },
                 onLiveTvClick = { nav.navigate("tv") },
+                onChannelClick = { nav.navigate(liveRoute(it.url, it.name)) },
             )
         }
         composable("photos") {

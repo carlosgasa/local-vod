@@ -82,6 +82,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import com.local.vod.R
 import com.local.vod.domain.model.Episode
+import com.local.vod.domain.model.TitleList
+import com.local.vod.domain.model.TitleLists
 import kotlinx.coroutines.delay
 
 /** A falta de este tiempo para terminar aparece el aviso de "siguiente episodio". */
@@ -109,6 +111,8 @@ fun PlayerScreen(
         return
     }
 
+    val lists by viewModel.lists.collectAsStateWithLifecycle(initialValue = TitleLists())
+    val favoriteChannel = viewModel.liveUrl?.let { lists.contains(TitleList.CHANNELS, it) }
     val context = LocalContext.current
     // La cola son los episodios del título: así el botón de siguiente y el salto automático
     // al final los hace Media3 por su cuenta.
@@ -361,6 +365,8 @@ fun PlayerScreen(
                 hasNext = next != null,
                 hasAudioChoice = tracks.choices(C.TRACK_TYPE_AUDIO).size > 1,
                 hasSubtitles = tracks.choices(C.TRACK_TYPE_TEXT).isNotEmpty(),
+                favorite = favoriteChannel,
+                onFavorite = { favoriteChannel?.let(viewModel::toggleFavoriteChannel); interaction++ },
                 playFocus = playFocus,
                 onPlayPause = { if (player.isPlaying) player.pause() else player.play(); interaction++ },
                 onSeekBy = ::seekBy,
@@ -494,6 +500,9 @@ private fun PlayerControls(
     hasNext: Boolean,
     hasAudioChoice: Boolean,
     hasSubtitles: Boolean,
+    // solo en canales en vivo: null en películas y series
+    favorite: Boolean?,
+    onFavorite: () -> Unit,
     playFocus: FocusRequester,
     onPlayPause: () -> Unit,
     onSeekBy: (Long) -> Unit,
@@ -539,6 +548,13 @@ private fun PlayerControls(
             if (!live) TvIconButton(onClick = { onSeekBy(SEEK_STEP_MS) }, icon = R.drawable.ic_forward, description = "Adelante 10 segundos")
             if (hasNext) TvIconButton(onClick = onNext, icon = R.drawable.ic_skip_next, description = "Siguiente episodio")
             Spacer(Modifier.weight(1f))
+            if (favorite != null) {
+                TvButton(
+                    onClick = onFavorite,
+                    icon = if (favorite) R.drawable.ic_favorite else R.drawable.ic_favorite_border,
+                    text = if (favorite) "En favoritos" else "Favorito",
+                )
+            }
             if (hasAudioChoice) TvButton(onClick = onAudio) { Text("Audio") }
             if (hasSubtitles) TvButton(onClick = onSubtitles) { Text("Subtítulos") }
         }

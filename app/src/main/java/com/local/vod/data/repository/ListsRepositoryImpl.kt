@@ -37,6 +37,7 @@ class ListsRepositoryImpl @Inject constructor(
             when (list) {
                 TitleList.LATER -> current.copy(later = ids)
                 TitleList.FAVORITES -> current.copy(favorites = ids)
+                TitleList.CHANNELS -> current.copy(channels = ids)
             }
         }
         _lists.value = api.setInList(base(), profile.id, list.key, titleId, on)

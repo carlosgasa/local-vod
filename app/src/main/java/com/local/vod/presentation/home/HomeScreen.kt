@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import com.local.vod.presentation.formatDuration
+import com.local.vod.domain.model.Channel
+import com.local.vod.presentation.tv.ChannelCard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -114,6 +116,7 @@ fun HomeScreen(
     onPhotosClick: () -> Unit,
     onMusicClick: () -> Unit,
     onLiveTvClick: () -> Unit,
+    onChannelClick: (Channel) -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -388,6 +391,18 @@ fun HomeScreen(
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     items(state.continueItems, key = { it.episode.id }) { item ->
                                         ContinueCard(item) { onContinueClick(item) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (state.favoriteChannels.isNotEmpty()) {
+                        item(key = "canales") {
+                            Column {
+                                RowHeader("Canales favoritos")
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    items(state.favoriteChannels, key = { it.id }) { channel ->
+                                        ChannelCard(channel) { onChannelClick(channel) }
                                     }
                                 }
                             }
