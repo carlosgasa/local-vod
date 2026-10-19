@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.domain.model.Episode
 import com.local.vod.domain.model.Title
+import com.local.vod.domain.model.TitleList
+import com.local.vod.domain.model.TitleLists
+import com.local.vod.domain.repository.ListsRepository
 import com.local.vod.domain.usecase.ClearProgress
 import com.local.vod.domain.usecase.GetTitle
 import com.local.vod.domain.usecase.GetTitleProgress
@@ -25,6 +28,7 @@ data class DetailUiState(
     val error: String? = null,
     /** Por dónde seguir la serie: episodio y desde qué milisegundo. */
     val next: Pair<Episode, Long>? = null,
+    val lists: TitleLists = TitleLists(),
 )
 
 @HiltViewModel
@@ -35,14 +39,15 @@ class DetailViewModel @Inject constructor(
     private val nextToWatch: NextToWatch,
     private val clearProgress: ClearProgress,
     private val markWatched: MarkWatched,
+    private val lists: ListsRepository,
 ) : ViewModel() {
 
     private val titleId: String = checkNotNull(savedState["titleId"])
     private val title = MutableStateFlow<Title?>(null)
     private val error = MutableStateFlow<String?>(null)
 
-    val state = combine(title, getTitleProgress(titleId), error) { title, progress, error ->
-        DetailUiState(title, progress, error, title?.let { nextToWatch(it, progress) })
+    val state = combine(title, getTitleProgress(titleId), error, lists.lists) { title, progress, error, lists ->
+        DetailUiState(title, progress, error, title?.let { nextToWatch(it, progress) }, lists)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailUiState())
 
     init {
@@ -50,6 +55,12 @@ class DetailViewModel @Inject constructor(
             runCatching { getTitle(titleId) }
                 .onSuccess { title.value = it }
                 .onFailure { error.value = it.message ?: "No se pudo cargar" }
+        }
+    }
+
+    fun toggle(list: TitleList) {
+        viewModelScope.launch {
+            runCatching { lists.set(list, titleId, !state.value.lists.contains(list, titleId)) }
         }
     }
 

@@ -223,8 +223,8 @@ fun HomeScreen(
                         ) {
                             scope.launch {
                                 val firstResultIndex = 1 + if (state.isSearching) 0 else {
-                                    (if (state.continueItems.isNotEmpty()) 1 else 0) +
-                                        (if (recentTitles.isNotEmpty()) 1 else 0)
+                                    listOf(state.continueItems, state.laterTitles, state.favoriteTitles, recentTitles)
+                                        .count { it.isNotEmpty() }
                                 }
                                 gridState.scrollToItem(firstResultIndex)
                                 firstResultFocus.requestFocus()
@@ -302,13 +302,14 @@ fun HomeScreen(
                             }
                         }
                     }
-                    if (!state.isSearching && recentTitles.isNotEmpty()) {
+                    fun titleRow(label: String, titles: List<Title>) {
+                        if (state.isSearching || titles.isEmpty()) return
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             Column {
-                                Text("Añadido recientemente", style = MaterialTheme.typography.titleLarge)
+                                Text(label, style = MaterialTheme.typography.titleLarge)
                                 Spacer(Modifier.height(8.dp))
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    items(recentTitles, key = { it.id }) { title ->
+                                    items(titles, key = { it.id }) { title ->
                                         TitleCard(title, previewsEnabled, foreground, activePreview,
                                             { activePreview = it }) { onTitleClick(title) }
                                     }
@@ -316,6 +317,9 @@ fun HomeScreen(
                             }
                         }
                     }
+                    titleRow("Ver después", state.laterTitles)
+                    titleRow("Favoritos", state.favoriteTitles)
+                    titleRow("Añadido recientemente", recentTitles)
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Text(
                             if (state.isSearching) "Resultados" else "Biblioteca",

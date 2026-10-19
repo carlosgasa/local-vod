@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +42,8 @@ import androidx.compose.material3.Text
 import com.local.vod.R
 import com.local.vod.domain.model.Episode
 import com.local.vod.domain.model.PlaybackProgress
+import com.local.vod.domain.model.TitleList
+import com.local.vod.domain.model.TitleLists
 import com.local.vod.domain.usecase.MarkWatched
 import com.local.vod.presentation.formatDuration
 import com.local.vod.presentation.formatTime
@@ -91,6 +95,8 @@ fun DetailScreen(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
                     Spacer(Modifier.height(20.dp))
+                    ListButtons(state.lists, title.id, viewModel::toggle)
+                    Spacer(Modifier.height(16.dp))
 
                     if (title.isMovie) {
                         val movie = title.episodes.firstOrNull()
@@ -127,6 +133,25 @@ fun DetailScreen(
             onResume = { asking = null; onPlay(episode.id, saved?.positionMs ?: 0L) },
             onRestart = { asking = null; viewModel.restart(episode.id) { onPlay(episode.id, 0L) } },
             onDismiss = { asking = null },
+        )
+    }
+}
+
+@Composable
+private fun ListButtons(lists: TitleLists, titleId: String, onToggle: (TitleList) -> Unit) {
+    val later = lists.contains(TitleList.LATER, titleId)
+    val favorite = lists.contains(TitleList.FAVORITES, titleId)
+    // en el celular puede no caber la fila entera: se desliza en vez de cortarse
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        TvButton(
+            onClick = { onToggle(TitleList.LATER) },
+            icon = if (later) R.drawable.ic_check else R.drawable.ic_add,
+            text = if (later) "En Ver después" else "Ver después",
+        )
+        TvButton(
+            onClick = { onToggle(TitleList.FAVORITES) },
+            icon = if (favorite) R.drawable.ic_favorite else R.drawable.ic_favorite_border,
+            text = if (favorite) "En Favoritos" else "Favoritos",
         )
     }
 }

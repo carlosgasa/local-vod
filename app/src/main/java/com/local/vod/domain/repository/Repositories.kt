@@ -5,6 +5,8 @@ import com.local.vod.domain.model.PlaybackProgress
 import com.local.vod.domain.model.Profile
 import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.model.Title
+import com.local.vod.domain.model.TitleList
+import com.local.vod.domain.model.TitleLists
 import com.local.vod.domain.model.PhotoAlbum
 import com.local.vod.domain.model.MusicAlbum
 import kotlinx.coroutines.flow.Flow
@@ -47,6 +49,13 @@ interface ProfileRepository {
     suspend fun select(profile: Profile)
     suspend fun rename(profile: Profile, name: String)
     suspend fun delete(profile: Profile)
+}
+
+interface ListsRepository {
+    /** "Ver después" y "Favoritos" del perfil actual. */
+    val lists: Flow<TitleLists>
+    suspend fun refresh()
+    suspend fun set(list: TitleList, titleId: String, on: Boolean)
 }
 
 interface ProgressRepository {

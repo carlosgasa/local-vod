@@ -278,6 +278,22 @@ def test_state_http(tmp, root):
     assert len(items) == 1 and items[0]["positionMs"] == 5_000, items
     assert get("/api/progress?profile=otro")["items"] == []
 
+    # ver después y favoritos: por perfil, el último añadido primero, sin repetidos
+    def mark(lst, title, on=True):
+        return post("/api/lists", {"profile": casa["id"], "list": lst, "titleId": title, "on": on})
+    mark("later", "Cortos")
+    mark("later", "Breaking Bad")
+    assert mark("later", "Cortos")["later"] == ["Cortos", "Breaking Bad"]
+    assert mark("favorites", "Breaking Bad")["favorites"] == ["Breaking Bad"]
+    assert mark("later", "Breaking Bad", on=False)["later"] == ["Cortos"]
+    assert get("/api/lists?profile=" + casa["id"]) == {"later": ["Cortos"], "favorites": ["Breaking Bad"]}
+    assert get("/api/lists?profile=otro") == {"later": [], "favorites": []}
+    try:
+        mark("otra-lista", "Cortos")
+        assert False, "una lista que no existe se rechaza"
+    except urllib.error.HTTPError as e:
+        assert e.code == 400, e.code
+
     # subida: cada archivo cae solo en su categoría y rechaza lo que no toca
     def put(path, data):
         request = urllib.request.Request(base + path, data=data, method="PUT")
@@ -364,6 +380,7 @@ def test_state_http(tmp, root):
     rejects("/api/rename", {"id": "Cortos", "name": "..mala"}, 400)
     rejects("/api/rename", {"id": "Cortos", "name": "Breaking Bad"}, 409)
     assert post("/api/rename", {"id": "Cortos", "name": "Cortos nuevos"})["id"] == "Cortos nuevos"
+    assert get("/api/lists?profile=" + casa["id"])["later"] == ["Cortos nuevos"], "renombrar no lo saca de la lista"
     assert (root / "Cortos nuevos").is_dir() and not (root / "Cortos").exists()
     rejects("/api/delete", {"id": "../fuera"}, 403)
     rejects("/api/delete", {"id": str(root.parent / "fuera")}, 403)

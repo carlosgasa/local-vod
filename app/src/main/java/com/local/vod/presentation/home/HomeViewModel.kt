@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.local.vod.domain.model.ContinueItem
 import com.local.vod.domain.model.Title
+import com.local.vod.domain.model.TitleLists
+import com.local.vod.domain.repository.ListsRepository
 import com.local.vod.domain.repository.ProfileRepository
 import com.local.vod.domain.repository.ServerRepository
 import com.local.vod.domain.usecase.GetContinueWatching
@@ -31,6 +33,7 @@ data class HomeUiState(
     val error: String? = null,
     val titles: List<Title> = emptyList(),
     val continueItems: List<ContinueItem> = emptyList(),
+    val lists: TitleLists = TitleLists(),
     val searchOpen: Boolean = false,
     val searchQuery: String = "",
 ) {
@@ -41,6 +44,10 @@ data class HomeUiState(
         val query = searchQuery.trim().normalizeForSearch()
         return titles.filter { query in it.name.normalizeForSearch() }
     }
+
+    // un id que ya no está en la biblioteca (se borró la película) simplemente no sale
+    val laterTitles: List<Title> get() = lists.later.mapNotNull { id -> titles.firstOrNull { it.id == id } }
+    val favoriteTitles: List<Title> get() = lists.favorites.mapNotNull { id -> titles.firstOrNull { it.id == id } }
 
     val recentTitles: List<Title> get() =
         if (titles.size > 6 && titles.any { it.addedAt > 0L }) {
@@ -63,6 +70,7 @@ class HomeViewModel @Inject constructor(
     getContinueWatching: GetContinueWatching,
     server: ServerRepository,
     profiles: ProfileRepository,
+    private val lists: ListsRepository,
 ) : ViewModel() {
 
     val previewsEnabled = server.previewsEnabled
@@ -99,6 +107,9 @@ class HomeViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            lists.lists.collect { value -> _state.update { it.copy(lists = value) } }
+        }
+        viewModelScope.launch {
             getContinueWatching()
                 .catch { /* sin servidor todavía: la fila sale vacía */ }
                 .collect { items -> _state.update { it.copy(continueItems = items) } }
@@ -110,6 +121,7 @@ class HomeViewModel @Inject constructor(
             _state.update { it.copy(loading = true, error = null) }
             // lo visto en el móvil tiene que aparecer en la tele: primero se sincroniza
             runCatching { syncProgress() }
+            runCatching { lists.refresh() }
             runCatching { getLibrary(refresh) }
                 .onSuccess { titles -> _state.update { it.copy(loading = false, titles = titles) } }
                 .onFailure { e ->

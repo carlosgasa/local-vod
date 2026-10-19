@@ -124,6 +124,7 @@ def delete_profile(profile_id):
     def mutate(state):
         state["profiles"] = [p for p in state["profiles"] if p["id"] != profile_id]
         state["progress"].pop(profile_id, None)
+        state.get("lists", {}).pop(profile_id, None)
         return True
     return with_state(mutate)
 
@@ -147,6 +148,36 @@ def save_progress(profile_id, episode_id, title_id, position_ms, duration_ms):
         }
         return True
     return with_state(mutate)
+
+
+# "Ver después" y "Favoritos": ids de títulos por perfil, el último añadido primero.
+LISTS = ("later", "favorites")
+
+
+def lists_of(profile_id):
+    rows = load_state().get("lists", {}).get(profile_id, {})
+    return {name: rows.get(name, []) for name in LISTS}
+
+
+def set_in_list(profile_id, name, title_id, on):
+    if not profile_id or name not in LISTS or not isinstance(title_id, str) or not title_id:
+        return None
+
+    def mutate(state):
+        rows = state.setdefault("lists", {}).setdefault(profile_id, {})
+        ids = [i for i in rows.get(name, []) if i != title_id]
+        rows[name] = [title_id] + ids if on else ids
+        return {n: rows.get(n, []) for n in LISTS}
+    return with_state(mutate)
+
+
+def rename_in_lists(old, new):
+    """Renombrar un título no lo saca de las listas de nadie."""
+    def mutate(state):
+        for rows in state.get("lists", {}).values():
+            for name, ids in rows.items():
+                rows[name] = [new if i == old else i for i in ids]
+    with_state(mutate)
 
 
 # ---------------------------------------------------------------- enlaces
@@ -962,6 +993,7 @@ def rename_title(identifier, name):
         source.rename(target)
     except OSError:
         return None, 400
+    rename_in_lists(identifier, new_id)
     return {"ok": True, "id": new_id}, 200
 
 
@@ -1160,6 +1192,9 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(urlparse(self.path).query)
             profile_id = (query.get("profile") or [""])[0]
             return self.send_json({"items": progress_of(profile_id)})
+        if path == "/api/lists":
+            profile_id = (parse_qs(urlparse(self.path).query).get("profile") or [""])[0]
+            return self.send_json(lists_of(profile_id))
         if path == "/api/status":
             return self.send_json(status())
         if path == "/api/jobs":
@@ -1257,6 +1292,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/links/delete":
             delete_link(body.get("url"))
             return self.send_json({"ok": True})
+
+        if path == "/api/lists":
+            lists = set_in_list(body.get("profile"), body.get("list"), body.get("titleId"), bool(body.get("on")))
+            return self.send_json(lists or {"error": "perfil, lista o título no válidos"}, 200 if lists else 400)
 
         if path == "/api/progress":
             ok = save_progress(

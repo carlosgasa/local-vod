@@ -7,6 +7,7 @@ import com.local.vod.domain.model.Battery
 import com.local.vod.domain.model.Profile
 import com.local.vod.domain.model.ServerStatus
 import com.local.vod.domain.model.Title
+import com.local.vod.domain.model.TitleLists
 import com.local.vod.domain.model.PhotoAlbum
 import com.local.vod.domain.model.MusicAlbum
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +55,12 @@ private data class SaveProgressBody(
 
 @Serializable
 private data class NameBody(val name: String)
+
+@Serializable
+data class ListsResponse(val later: List<String> = emptyList(), val favorites: List<String> = emptyList())
+
+@Serializable
+private data class SetInListBody(val profile: String, val list: String, val titleId: String, val on: Boolean)
 
 @Serializable
 private data class ProfileBody(val id: String, val name: String = "")
@@ -183,6 +190,16 @@ class VodApi @Inject constructor(
     suspend fun deleteProfile(baseUrl: String, id: String) {
         post(baseUrl, "/api/profiles/delete", json.encodeToString(ProfileBody(id))) { }
     }
+
+    suspend fun lists(baseUrl: String, profileId: String): TitleLists =
+        get(baseUrl, "/api/lists?profile=$profileId") { body ->
+            json.decodeFromString<ListsResponse>(body).let { TitleLists(it.later, it.favorites) }
+        }
+
+    suspend fun setInList(baseUrl: String, profileId: String, list: String, titleId: String, on: Boolean): TitleLists =
+        post(baseUrl, "/api/lists", json.encodeToString(SetInListBody(profileId, list, titleId, on))) { body ->
+            json.decodeFromString<ListsResponse>(body).let { TitleLists(it.later, it.favorites) }
+        }
 
     suspend fun status(baseUrl: String): ServerStatus = get(baseUrl, "/api/status") { body ->
         val dto = json.decodeFromString<StatusResponse>(body)

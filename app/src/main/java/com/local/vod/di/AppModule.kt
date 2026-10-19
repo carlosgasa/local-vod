@@ -9,12 +9,14 @@ import androidx.room.Room
 import com.local.vod.data.local.ProgressDao
 import com.local.vod.data.local.VodDatabase
 import com.local.vod.data.repository.LibraryRepositoryImpl
+import com.local.vod.data.repository.ListsRepositoryImpl
 import com.local.vod.data.repository.PhotoRepositoryImpl
 import com.local.vod.data.repository.MusicRepositoryImpl
 import com.local.vod.data.repository.ProfileRepositoryImpl
 import com.local.vod.data.repository.ProgressRepositoryImpl
 import com.local.vod.data.repository.ServerRepositoryImpl
 import com.local.vod.domain.repository.LibraryRepository
+import com.local.vod.domain.repository.ListsRepository
 import com.local.vod.domain.repository.PhotoRepository
 import com.local.vod.domain.repository.MusicRepository
 import com.local.vod.domain.repository.ProfileRepository
@@ -99,4 +101,7 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun profiles(impl: ProfileRepositoryImpl): ProfileRepository
+
+    @Binds
+    abstract fun lists(impl: ListsRepositoryImpl): ListsRepository
 }
