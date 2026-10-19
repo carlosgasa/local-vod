@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.local.vod.domain.model.Profile
 import com.local.vod.domain.repository.ServerRepository
 import com.local.vod.domain.usecase.CreateProfile
+import com.local.vod.domain.usecase.DeleteProfile
+import com.local.vod.domain.usecase.RenameProfile
 import com.local.vod.domain.usecase.GetProfiles
 import com.local.vod.domain.usecase.SelectProfile
 import com.local.vod.domain.usecase.SyncProgress
@@ -21,6 +23,11 @@ data class ProfileUiState(
     val profiles: List<Profile> = emptyList(),
     val error: String? = null,
     val newName: String = "",
+    val editing: Boolean = false,
+    // el perfil cuyo nombre está en la caja de texto, o null si la caja crea uno nuevo
+    val renaming: Profile? = null,
+    // borrar pide pulsar dos veces: con el mando es fácil darle sin querer
+    val confirmDelete: String? = null,
 )
 
 @HiltViewModel
@@ -30,6 +37,8 @@ class ProfileViewModel @Inject constructor(
     private val selectProfile: SelectProfile,
     private val syncProgress: SyncProgress,
     private val server: ServerRepository,
+    private val renameProfile: RenameProfile,
+    private val deleteProfile: DeleteProfile,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ProfileUiState())
@@ -57,6 +66,38 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun onNameChange(value: String) = _state.update { it.copy(newName = value) }
+
+    fun toggleEditing() = _state.update {
+        it.copy(editing = !it.editing, renaming = null, confirmDelete = null, newName = "")
+    }
+
+    fun startRename(profile: Profile) = _state.update {
+        it.copy(renaming = profile, newName = profile.name, confirmDelete = null)
+    }
+
+    fun delete(profile: Profile) {
+        if (_state.value.confirmDelete != profile.id) {
+            _state.update { it.copy(confirmDelete = profile.id, renaming = null, newName = "") }
+            return
+        }
+        viewModelScope.launch {
+            runCatching { deleteProfile(profile) }
+                .onSuccess { _state.update { it.copy(confirmDelete = null) }; load() }
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
+
+    /** El botón de la caja de texto: crea un perfil, o guarda el nombre si se está renombrando. */
+    fun submit(onDone: () -> Unit) {
+        val renaming = _state.value.renaming ?: return create(onDone)
+        val name = _state.value.newName.trim()
+        if (name.isEmpty()) return
+        viewModelScope.launch {
+            runCatching { renameProfile(renaming, name) }
+                .onSuccess { _state.update { it.copy(renaming = null, newName = "") }; load() }
+                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+        }
+    }
 
     fun create(onDone: () -> Unit) {
         val name = _state.value.newName.trim()

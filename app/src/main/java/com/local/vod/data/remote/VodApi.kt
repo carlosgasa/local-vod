@@ -56,6 +56,9 @@ private data class SaveProgressBody(
 private data class NameBody(val name: String)
 
 @Serializable
+private data class ProfileBody(val id: String, val name: String = "")
+
+@Serializable
 data class StatusResponse(
     val host: HostDto = HostDto(),
     val network: NetworkDto = NetworkDto(),
@@ -172,6 +175,14 @@ class VodApi @Inject constructor(
         post(baseUrl, "/api/profiles", json.encodeToString(NameBody(name))) { body ->
             json.decodeFromString<ProfileDto>(body).takeIf { it.id.isNotEmpty() }?.let { Profile(it.id, it.name) }
         }
+
+    suspend fun renameProfile(baseUrl: String, id: String, name: String) {
+        post(baseUrl, "/api/profiles/rename", json.encodeToString(ProfileBody(id, name))) { }
+    }
+
+    suspend fun deleteProfile(baseUrl: String, id: String) {
+        post(baseUrl, "/api/profiles/delete", json.encodeToString(ProfileBody(id))) { }
+    }
 
     suspend fun status(baseUrl: String): ServerStatus = get(baseUrl, "/api/status") { body ->
         val dto = json.decodeFromString<StatusResponse>(body)

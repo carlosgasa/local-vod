@@ -72,8 +72,33 @@ fun ProfileScreen(
             state.loading -> Text("Buscando el servidor…")
             else -> LazyRow(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 items(state.profiles, key = { it.id }) { profile ->
-                    ProfileAvatar(profile) { viewModel.choose(profile, onChosen) }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        ProfileAvatar(profile) {
+                            if (state.editing) viewModel.startRename(profile) else viewModel.choose(profile, onChosen)
+                        }
+                        if (state.editing) {
+                            Spacer(Modifier.height(8.dp))
+                            TvButton(onClick = { viewModel.delete(profile) }) {
+                                Text(if (state.confirmDelete == profile.id) "¿Seguro? Borrar" else "Borrar")
+                            }
+                        }
+                    }
                 }
+            }
+        }
+
+        if (state.error == null && !state.loading && state.profiles.isNotEmpty()) {
+            Spacer(Modifier.height(24.dp))
+            TvButton(onClick = viewModel::toggleEditing) {
+                Text(if (state.editing) "Listo" else "Editar perfiles")
+            }
+            if (state.editing) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Toca un perfil para cambiarle el nombre. Al borrarlo se pierde lo que tenía visto.",
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                )
             }
         }
 
@@ -86,11 +111,11 @@ fun ProfileScreen(
                 textStyle = TextStyle(color = Color.White, fontSize = 20.sp),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { viewModel.create(onChosen) }),
+                keyboardActions = KeyboardActions(onDone = { viewModel.submit(onChosen) }),
                 decorationBox = { field ->
                     Box(Modifier.padding(14.dp)) {
                         if (state.newName.isEmpty()) {
-                            Text("Nombre nuevo", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                            Text(if (state.renaming != null) "Nombre" else "Nombre nuevo", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                         }
                         field()
                     }
@@ -101,11 +126,11 @@ fun ProfileScreen(
                     .border(2.dp, MaterialTheme.colorScheme.primary),
             )
             Spacer(Modifier.width(12.dp))
-            TvButton(
-                onClick = { viewModel.create(onChosen) },
-                icon = R.drawable.ic_add,
-                text = "Crear perfil",
-            )
+            if (state.renaming != null) {
+                TvButton(onClick = { viewModel.submit(onChosen) }, icon = R.drawable.ic_check, text = "Guardar nombre")
+            } else {
+                TvButton(onClick = { viewModel.submit(onChosen) }, icon = R.drawable.ic_add, text = "Crear perfil")
+            }
         }
     }
 }

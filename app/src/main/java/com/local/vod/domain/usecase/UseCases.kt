@@ -100,6 +100,15 @@ class SelectProfile @Inject constructor(private val profiles: ProfileRepository)
     suspend operator fun invoke(profile: Profile) = profiles.select(profile)
 }
 
+class RenameProfile @Inject constructor(private val profiles: ProfileRepository) {
+    suspend operator fun invoke(profile: Profile, name: String) = profiles.rename(profile, name)
+}
+
+/** Borra el perfil y todo lo que tenía visto, en todos los aparatos. */
+class DeleteProfile @Inject constructor(private val profiles: ProfileRepository) {
+    suspend operator fun invoke(profile: Profile) = profiles.delete(profile)
+}
+
 /**
  * Por dónde seguir una serie: el episodio a medias más reciente y, si no hay
  * ninguno, el primero sin terminar. Devuelve también desde qué milisegundo.

@@ -45,6 +45,8 @@ interface ProfileRepository {
     suspend fun available(): List<Profile>
     suspend fun create(name: String): Profile?
     suspend fun select(profile: Profile)
+    suspend fun rename(profile: Profile, name: String)
+    suspend fun delete(profile: Profile)
 }
 
 interface ProgressRepository {

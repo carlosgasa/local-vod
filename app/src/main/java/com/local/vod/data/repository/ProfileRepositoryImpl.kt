@@ -37,6 +37,22 @@ class ProfileRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun rename(profile: Profile, name: String) {
+        api.renameProfile(base(), profile.id, name)
+        // si es el perfil de este aparato, que el nombre nuevo se vea ya
+        dataStore.edit { if (it[ID] == profile.id) it[NAME] = name }
+    }
+
+    override suspend fun delete(profile: Profile) {
+        api.deleteProfile(base(), profile.id)
+        dataStore.edit {
+            if (it[ID] == profile.id) {
+                it.remove(ID)
+                it.remove(NAME)
+            }
+        }
+    }
+
     private suspend fun base(): String =
         server.baseUrl.first() ?: throw IllegalStateException("Servidor sin configurar")
 
