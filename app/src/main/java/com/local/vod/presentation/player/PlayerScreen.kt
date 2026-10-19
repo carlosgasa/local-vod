@@ -310,6 +310,9 @@ fun PlayerScreen(
                     playerView = this
                 }
             },
+            // Mientras corre el video, ni el Fire TV ni el celular apagan la pantalla;
+            // en pausa sí se deja, para que no se quede encendida toda la noche.
+            update = { it.keepScreenOn = isPlaying },
         )
 
         // Con los controles escondidos, en el celular: doble toque a un lado salta 10 s,
