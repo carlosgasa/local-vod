@@ -3,6 +3,7 @@ package com.local.vod.presentation.profile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.local.vod.domain.model.Profile
+import com.local.vod.domain.repository.ServerRepository
 import com.local.vod.domain.usecase.CreateProfile
 import com.local.vod.domain.usecase.GetProfiles
 import com.local.vod.domain.usecase.SelectProfile
@@ -10,6 +11,7 @@ import com.local.vod.domain.usecase.SyncProgress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -27,17 +29,26 @@ class ProfileViewModel @Inject constructor(
     private val createProfile: CreateProfile,
     private val selectProfile: SelectProfile,
     private val syncProgress: SyncProgress,
+    private val server: ServerRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ProfileUiState())
     val state = _state.asStateFlow()
 
-    init { load() }
+    // Se recarga cada vez que cambia el servidor (por ejemplo, al volver de ajustes).
+    init { viewModelScope.launch { server.baseUrl.distinctUntilChanged().collect { load() } } }
 
     fun load() {
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
             runCatching { getProfiles() }
+                .recoverCatching { error ->
+                    // El servidor guardado no contesta: puede que cambiara de IP o de
+                    // máquina. Se busca en la red antes de dejar a nadie atascado aquí.
+                    val found = server.discover() ?: throw error
+                    server.save(found)
+                    getProfiles()
+                }
                 .onSuccess { list -> _state.update { it.copy(loading = false, profiles = list) } }
                 .onFailure { e ->
                     _state.update { it.copy(loading = false, error = e.message ?: "No se pudo conectar") }

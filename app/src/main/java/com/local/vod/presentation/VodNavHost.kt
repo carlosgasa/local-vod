@@ -44,7 +44,7 @@ fun VodNavHost(sharedFiles: ShareSelection, onShareConsumed: () -> Unit) {
             PhotosScreen(onBack = { nav.popBackStack() })
         }
         composable("profiles") {
-            ProfileScreen(onChosen = { nav.popBackStack() })
+            ProfileScreen(onChosen = { nav.popBackStack() }, onSetup = { nav.navigate("setup") })
         }
         composable("music") {
             MusicScreen(onBack = { nav.popBackStack() })

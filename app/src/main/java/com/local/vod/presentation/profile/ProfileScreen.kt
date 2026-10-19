@@ -44,6 +44,7 @@ import com.local.vod.presentation.focusHighlight
 @Composable
 fun ProfileScreen(
     onChosen: () -> Unit,
+    onSetup: () -> Unit,
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -60,8 +61,15 @@ fun ProfileScreen(
         Spacer(Modifier.height(32.dp))
 
         when {
-            state.error != null -> Text("No se pudo conectar: ${state.error}", textAlign = TextAlign.Center)
-            state.loading -> Text("Cargando perfiles…")
+            state.error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("No se pudo conectar: ${state.error}", textAlign = TextAlign.Center)
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TvButton(onClick = viewModel::load, icon = R.drawable.ic_refresh, text = "Reintentar")
+                    TvButton(onClick = onSetup, icon = R.drawable.ic_server, text = "Cambiar servidor")
+                }
+            }
+            state.loading -> Text("Buscando el servidor…")
             else -> LazyRow(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 items(state.profiles, key = { it.id }) { profile ->
                     ProfileAvatar(profile) { viewModel.choose(profile, onChosen) }
