@@ -122,6 +122,8 @@ def test_scan(root):
     assert s1[0]["durationSeconds"] is None
     assert serie["addedAt"] == max(e["addedAt"] for s in serie["seasons"] for e in s["episodes"])
     assert movie["preview"].startswith("/preview/") if server.ffmpeg_available() else movie["preview"] is None
+    assert movie["mosaic"] is None  # aún no generado (y con carátula no hace falta)
+    assert server.mosaic_path(root / "Dune (2021)" / "Dune.mkv", 2048) != server.thumb_path(root / "Dune (2021)" / "Dune.mkv", 2048)
 
     cortos = items["Cortos"]
     assert cortos["type"] == "series"  # varios videos sueltos
@@ -401,6 +403,24 @@ def test_state_http(tmp, root):
     print("estado por http OK")
 
 
+def test_mosaic(tmp):
+    """El mosaico sale de verdad: cuatro fotogramas en una imagen 2:3 de 480x720."""
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        print("mosaico: sin ffmpeg, se salta")
+        return
+    video = Path(tmp) / "prueba.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=duration=4:size=640x360:rate=10",
+                    "-pix_fmt", "yuv420p", str(video)], check=True)
+    out = Path(tmp) / "mosaico.jpg"
+    subprocess.run(server.mosaic_command(video, 4.0, out), check=True, capture_output=True)
+    size = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "csv=p=0",
+                           str(out)], capture_output=True, text=True).stdout.strip()
+    assert size == "480,720", size
+    print("mosaico OK")
+
+
 def test_convert_plan():
     """El orden importa: copiar es instantaneo, el chip rapido, la CPU el ultimo recurso."""
     plan = server.convert_plan(Path("a.mkv"), Path("a.mp4"), "h264", hardware=True)
@@ -435,6 +455,7 @@ if __name__ == "__main__":
         server.save_links([{"title": "Remoto", "url": "https://example.com/video.mp4"}])
         assert server.link_items()[0]["preview"] is None
         test_convert_plan()
+        test_mosaic(tmp)
         # un video suelto en la raiz llega a preview_source como si fuera carpeta
         suelto = root / "suelto.mkv"
         suelto.write_bytes(b"x" * 16)

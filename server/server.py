@@ -353,6 +353,12 @@ def thumb_path(video, size):
     return STATE_FILE.parent / "thumbs" / name
 
 
+def mosaic_path(video, size):
+    key = f"{video.relative_to(MEDIA_ROOT)}:{size}:mosaico"
+    name = hashlib.sha256(key.encode()).hexdigest() + ".jpg"
+    return STATE_FILE.parent / "thumbs" / name
+
+
 def preview_path(video, size):
     key = f"{video.relative_to(MEDIA_ROOT)}:{size}"
     name = hashlib.sha256(key.encode()).hexdigest() + ".mp4"
@@ -417,12 +423,15 @@ def scan_title(folder, durations=None):
     is_movie = not season_dirs and len(episodes) == 1
     first = preview_source(folder)
     preview = preview_path(first, first.stat().st_size) if first else None
+    mosaic = mosaic_path(first, first.stat().st_size) if first else None
     return {
         "id": str(folder.relative_to(MEDIA_ROOT)),
         "title": folder.stem if loose else folder.name,
         "type": "movie" if is_movie else "series",
         "poster": None if loose else find_poster(folder),
         "preview": "/preview/" + preview.name if preview and preview.is_file() and ffmpeg_available() else None,
+        # cuatro fotogramas en cuadrícula: la carátula de los títulos que no tienen
+        "mosaic": "/thumb/" + mosaic.name if mosaic and mosaic.is_file() else None,
         "addedAt": max(ep["addedAt"] for ep in episodes),
         "seasons": [{"number": n, "episodes": seasons[n]} for n in sorted(seasons)],
     }
@@ -669,6 +678,7 @@ _durations_lock = threading.Lock()
 _scanning_durations = False
 _scanning_thumbs = False
 _scanning_previews = False
+_scanning_mosaics = False
 _preview_lock = threading.Lock()
 
 
@@ -814,9 +824,50 @@ def generate_previews(files):
             _scanning_previews = False
 
 
+# cada cuadro vertical: el mosaico entero queda 2:3, como una carátula
+MOSAIC_TILE = (240, 360)
+
+
+def mosaic_command(path, seconds, target):
+    """Un fotograma al 20, 40, 60 y 80 % del video, en una cuadrícula de 2x2."""
+    times = [seconds * f for f in (0.2, 0.4, 0.6, 0.8)] if seconds > 0 else [1, 10, 30, 60]
+    w, h = MOSAIC_TILE
+    args = ["ffmpeg", "-nostdin", "-y"]
+    for t in times:
+        args += ["-ss", f"{t:.2f}", "-i", str(path)]
+    tiles = ";".join(
+        f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1[v{i}]" for i in range(4))
+    grid = "[v0][v1][v2][v3]xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0[out]"
+    return args + ["-filter_complex", f"{tiles};{grid}", "-map", "[out]", "-frames:v", "1", str(target)]
+
+
+def generate_mosaics(files):
+    """Los mosaicos se sacan de uno en uno, como los adelantos, para no ahogar la CPU."""
+    global _scanning_mosaics
+    try:
+        for path in files:
+            try:
+                target = mosaic_path(path, path.stat().st_size)
+                if target.is_file():
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                partial = target.with_suffix(".tmp.jpg")
+                result = subprocess.run(mosaic_command(path, probe_duration(path), partial),
+                                        capture_output=True, timeout=180)
+                if result.returncode == 0 and partial.is_file():
+                    partial.replace(target)
+                else:
+                    partial.unlink(missing_ok=True)
+            except (OSError, subprocess.SubprocessError):
+                continue
+    finally:
+        with _preview_lock:
+            _scanning_mosaics = False
+
+
 def start_media_scans(files, thumbnails=True):
     # thumbnails=False es la pista de que son audios: ni miniatura ni adelanto que sacar.
-    global _scanning_durations, _scanning_thumbs, _scanning_previews
+    global _scanning_durations, _scanning_thumbs, _scanning_previews, _scanning_mosaics
     if not files:
         return
     cache = load_durations()
@@ -837,6 +888,14 @@ def start_media_scans(files, thumbnails=True):
             if pending:
                 _scanning_previews = True
                 threading.Thread(target=generate_previews, args=(pending,), daemon=True).start()
+        if thumbnails and ffmpeg_available() and not _scanning_mosaics:
+            # solo hace falta donde no hay carátula
+            roots = {title_root(p) for p in files}
+            sources = [preview_source(r) for r in roots if not r.is_dir() or find_poster(r) is None]
+            pending = [p for p in sources if p and not mosaic_path(p, p.stat().st_size).is_file()]
+            if pending:
+                _scanning_mosaics = True
+                threading.Thread(target=generate_mosaics, args=(pending,), daemon=True).start()
 
 
 def library_stats():

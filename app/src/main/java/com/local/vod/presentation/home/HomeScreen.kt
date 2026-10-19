@@ -435,8 +435,8 @@ private fun Message(
 
 @Composable
 /**
- * La carátula, y si no hay: un fotograma del video ([fallbackUrl]) apagado, con el
- * título encima para saber qué es. Sin fotograma tampoco, un degradado con el título.
+ * La carátula, y si no hay: la imagen de [fallbackUrl] (el mosaico de fotogramas) con un
+ * difuminado encima. Sin ninguna imagen, un degradado con el título para saber qué es.
  */
 fun Poster(url: String?, name: String, modifier: Modifier = Modifier, fallbackUrl: String? = null) {
     Box(
@@ -454,9 +454,9 @@ fun Poster(url: String?, name: String, modifier: Modifier = Modifier, fallbackUr
             if (fallbackUrl != null) {
                 AsyncImage(
                     model = fallbackUrl,
-                    contentDescription = null,
+                    contentDescription = name,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().alpha(0.45f),
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
             Box(
@@ -464,16 +464,18 @@ fun Poster(url: String?, name: String, modifier: Modifier = Modifier, fallbackUr
                     .fillMaxSize()
                     .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f)))),
             )
-            Text(
-                name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(10.dp),
-            )
+            if (fallbackUrl == null) {
+                Text(
+                    name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(10.dp),
+                )
+            }
         }
     }
 }
@@ -509,18 +511,34 @@ private fun TitleCard(
             ready = true
         }
     }
-    // Sin texto debajo, como en las apps de streaming: el título va en la carátula
-    // (o encima del fotograma cuando no hay carátula).
-    TvCard(onClick = onClick, modifier = modifier.width(width), interactionSource = source) {
-        Box(Modifier.width(width).aspectRatio(2f / 3f)) {
-            val showPreview = ready && eligible && activePreview === owner
-            var videoReady by remember { mutableStateOf(false) }
-            if (showPreview) {
-                PreviewVideo(title.previewUrl, onReady = { videoReady = it })
+    // Sin texto debajo, como en las apps de streaming: el título ya va en la carátula.
+    // Sin carátula, el mosaico no dice qué es: entonces sí lleva el nombre debajo.
+    Column(modifier.width(width)) {
+        TvCard(onClick = onClick, modifier = Modifier.width(width), interactionSource = source) {
+            Box(Modifier.width(width).aspectRatio(2f / 3f)) {
+                val showPreview = ready && eligible && activePreview === owner
+                var videoReady by remember { mutableStateOf(false) }
+                if (showPreview) {
+                    PreviewVideo(title.previewUrl, onReady = { videoReady = it })
+                }
+                val posterAlpha by animateFloatAsState(if (showPreview && videoReady) 0f else 1f, label = "Adelanto")
+                Poster(
+                    title.posterUrl,
+                    title.name,
+                    Modifier.fillMaxSize().alpha(posterAlpha),
+                    fallbackUrl = title.mosaicUrl ?: title.thumbUrl,
+                )
+                if (progress != null) ProgressBar(progress, Modifier.align(Alignment.BottomCenter))
             }
-            val posterAlpha by animateFloatAsState(if (showPreview && videoReady) 0f else 1f, label = "Adelanto")
-            Poster(title.posterUrl, title.name, Modifier.fillMaxSize().alpha(posterAlpha), fallbackUrl = title.thumbUrl)
-            if (progress != null) ProgressBar(progress, Modifier.align(Alignment.BottomCenter))
+        }
+        if (title.posterUrl == null) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                title.name,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

@@ -6,6 +6,8 @@ data class Title(
     val isMovie: Boolean,
     val posterUrl: String?,
     val previewUrl: String? = null,
+    /** Cuatro fotogramas en cuadrícula que genera el servidor cuando no hay carátula. */
+    val mosaicUrl: String? = null,
     val seasons: List<Season>,
     /** Cuándo apareció en la carpeta: para la fila de "añadido recientemente". */
     val addedAt: Long = 0L,

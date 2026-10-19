@@ -18,6 +18,7 @@ data class TitleDto(
     val type: String,
     val poster: String? = null,
     val preview: String? = null,
+    val mosaic: String? = null,
     val seasons: List<SeasonDto> = emptyList(),
     val addedAt: Long = 0,
 )
@@ -72,6 +73,7 @@ fun TitleDto.toDomain(baseUrl: String) = Title(
     isMovie = type == "movie",
     posterUrl = poster?.let { absolute(it, baseUrl) },
     previewUrl = preview?.let { absolute(it, baseUrl) },
+    mosaicUrl = mosaic?.let { absolute(it, baseUrl) },
     seasons = seasons.map { season ->
         Season(
             number = season.number,
