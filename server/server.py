@@ -295,6 +295,9 @@ def preview_path(video, size):
 
 
 def preview_source(folder):
+    # un video suelto en la raiz llega aqui como si fuera carpeta: es su propio adelanto
+    if not folder.is_dir():
+        return folder if folder.suffix.lower() in VIDEO_EXT else None
     first = next((v for v in videos_in(folder) if v.suffix.lower() in VIDEO_EXT), None)
     if first is not None:
         return first
@@ -484,6 +487,8 @@ def library():
 JOBS = {}
 _jobs_lock = threading.Lock()
 COMPATIBLE_VIDEO = {"h264", "hevc", "mpeg4", "av1"}
+# el chip de video de Intel/AMD, si la maquina lo tiene (en la mini PC si)
+VAAPI_DEVICE = Path("/dev/dri/renderD128")
 
 
 def ffmpeg_available():
@@ -535,19 +540,37 @@ def run_ffmpeg(args, job_id, total_seconds):
     return process.wait(), error
 
 
+def convert_plan(source, target, codec, hardware=None):
+    """Los intentos, en orden: copiar el video tal cual, el chip de video, y al final la CPU.
+
+    Si uno falla, convert_job pasa al siguiente, asi que el chip de video no
+    necesita comprobaciones: o funciona o se cae solo al camino de siempre.
+    """
+    if hardware is None:
+        hardware = VAAPI_DEVICE.exists()
+    maps = ["-map", "0:v:0", "-map", "0:a?"]
+    # audio siempre a aac: es lo que entienden todos los aparatos
+    end = ["-c:a", "aac", "-movflags", "+faststart", str(target)]
+    base = ["ffmpeg", "-nostdin", "-y", "-i", str(source)]
+
+    remux = base + maps + ["-c:v", "copy"] + end
+    # decodifica la CPU y codifica el chip: los Intel viejos no decodifican HEVC
+    # bien, y de todos modos el tiempo se va en codificar
+    chip = (["ffmpeg", "-nostdin", "-y", "-vaapi_device", str(VAAPI_DEVICE), "-i", str(source)]
+            + maps + ["-vf", "format=nv12,hwupload", "-c:v", "h264_vaapi", "-qp", "23"] + end)
+    cpu = base + maps + ["-c:v", "libx264", "-preset", "veryfast",
+                         "-crf", "20", "-pix_fmt", "yuv420p"] + end
+
+    recode = [chip, cpu] if hardware else [cpu]
+    return [remux] + recode if codec in COMPATIBLE_VIDEO else recode
+
+
 def convert_job(job_id, source):
     target = source.with_name(f"{source.stem} (convertido).mp4")
     total = probe_duration(source)
     set_job(job_id, state="running", percent=0, file=source.name, target=target.name)
 
-    base = ["ffmpeg", "-nostdin", "-y", "-i", str(source)]
-    # audio siempre a aac: es lo que entienden todos los aparatos
-    remux = base + ["-map", "0:v:0", "-map", "0:a?", "-c:v", "copy", "-c:a", "aac", "-movflags", "+faststart", str(target)]
-    recode = base + ["-map", "0:v:0", "-map", "0:a?", "-c:v", "libx264", "-preset", "veryfast",
-                     "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart", str(target)]
-
-    plan = [remux, recode] if video_codec(source) in COMPATIBLE_VIDEO else [recode]
-    for attempt in plan:
+    for attempt in convert_plan(source, target, video_codec(source)):
         code, error = run_ffmpeg(attempt, job_id, total)
         if code == 0:
             set_job(job_id, state="done", percent=100, message=f"Creado: {target.name}")

@@ -8,6 +8,8 @@ Wants=network-online.target
 User=__VOD_USER__
 Environment=VOD_MEDIA=__VOD_MEDIA__
 Environment=VOD_PORT=8000
+# para que ffmpeg pueda usar el chip de video al convertir (/dev/dri)
+SupplementaryGroups=render video
 ExecStart=/usr/bin/python3 __VOD_DIR__/server/server.py
 Restart=on-failure
 RestartSec=3

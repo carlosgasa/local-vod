@@ -349,6 +349,18 @@ def test_state_http(tmp, root):
     print("estado por http OK")
 
 
+def test_convert_plan():
+    """El orden importa: copiar es instantaneo, el chip rapido, la CPU el ultimo recurso."""
+    plan = server.convert_plan(Path("a.mkv"), Path("a.mp4"), "h264", hardware=True)
+    assert [a[a.index("-c:v") + 1] for a in plan] == ["copy", "h264_vaapi", "libx264"]
+    # sin chip de video (la PC de escritorio, Termux) todo sigue como antes
+    assert [a[a.index("-c:v") + 1] for a in
+            server.convert_plan(Path("a.mkv"), Path("a.mp4"), "h264", hardware=False)] == ["copy", "libx264"]
+    # un codec que el aparato no entiende no se puede copiar: hay que recodificar
+    assert [a[a.index("-c:v") + 1] for a in
+            server.convert_plan(Path("a.wmv"), Path("a.mp4"), "wmv3", hardware=True)] == ["h264_vaapi", "libx264"]
+
+
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp) / "media"
@@ -370,6 +382,12 @@ if __name__ == "__main__":
         preview.write_bytes(b"preview")
         server.save_links([{"title": "Remoto", "url": "https://example.com/video.mp4"}])
         assert server.link_items()[0]["preview"] is None
+        test_convert_plan()
+        # un video suelto en la raiz llega a preview_source como si fuera carpeta
+        suelto = root / "suelto.mkv"
+        suelto.write_bytes(b"x" * 16)
+        assert server.preview_source(suelto) == suelto
+        assert server.preview_source(root / "poster.jpg") is None
         test_scan(root)
         test_http(root)
         test_state(tmp)
