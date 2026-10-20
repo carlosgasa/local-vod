@@ -5,6 +5,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import android.view.View
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.local.vod.domain.model.Channel
+import com.local.vod.domain.model.ChannelGroup
+import com.local.vod.presentation.tv.ChannelCard
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +45,7 @@ import android.os.Build
 import android.util.Rational
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.FontWeight
 import androidx.core.app.PictureInPictureModeChangedInfo
 import androidx.core.util.Consumer
 import androidx.compose.ui.platform.LocalContext
@@ -123,6 +136,9 @@ fun PlayerScreen(
 
     val lists by viewModel.lists.collectAsStateWithLifecycle(initialValue = TitleLists())
     val favoriteChannel = viewModel.liveUrl?.let { lists.contains(TitleList.CHANNELS, it) }
+    val channelGroups by viewModel.channels.collectAsStateWithLifecycle()
+    // el mosaico de canales: sigue abierto al cambiar de canal, para ir probando
+    var channelsOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     // La cola son los episodios del título: así el botón de siguiente y el salto automático
     // al final los hace Media3 por su cuenta.
@@ -185,7 +201,8 @@ fun PlayerScreen(
         }
     }
     // Con controles: el foco al botón de pausa. Sin ellos: a la pantalla, que recoge las flechas.
-    LaunchedEffect(controlsVisible) {
+    LaunchedEffect(controlsVisible, channelsOpen) {
+        if (channelsOpen) return@LaunchedEffect // el panel se queda con el foco
         runCatching { if (controlsVisible) playFocus.requestFocus() else rootFocus.requestFocus() }
     }
 
@@ -311,9 +328,10 @@ fun PlayerScreen(
     val remainingMs = if (tick.durationMs > 0) tick.durationMs - tick.positionMs else Long.MAX_VALUE
     val nextPromptVisible = failure == null && next != null && !cancelled && remainingMs in 0..NEXT_PROMPT_MS
     // con un aviso en pantalla, sus botones mandan: las flechas no se tocan
-    val panelOpen = askStillWatching || failure != null || nextPromptVisible || trackDialog != null
+    val panelOpen = askStillWatching || failure != null || nextPromptVisible || trackDialog != null || channelsOpen
 
     BackHandler(enabled = controlsVisible && !panelOpen) { controlsVisible = false }
+    BackHandler(enabled = channelsOpen) { channelsOpen = false }
 
     Box(
         Modifier
@@ -360,7 +378,11 @@ fun PlayerScreen(
             },
             // Mientras corre el video, ni el Fire TV ni el celular apagan la pantalla;
             // en pausa sí se deja, para que no se quede encendida toda la noche.
-            update = { it.keepScreenOn = isPlaying },
+            // al cambiar de canal hay otro reproductor: la vista tiene que usar el nuevo
+            update = {
+                it.player = player
+                it.keepScreenOn = isPlaying
+            },
         )
         // en la ventanita flotante, solo el video
         if (inPip) return@Box
@@ -428,6 +450,7 @@ fun PlayerScreen(
                 onNext = { player.seekToNextMediaItem() },
                 onAudio = { trackDialog = C.TRACK_TYPE_AUDIO },
                 onSubtitles = { trackDialog = C.TRACK_TYPE_TEXT },
+                onChannels = if (channelGroups.isNotEmpty()) ({ channelsOpen = true }) else null,
                 landscape = landscape,
                 onOrientation = if (isPhone) ::toggleOrientation else null,
                 onPip = if (canPip) ::enterPip else null,
@@ -438,7 +461,8 @@ fun PlayerScreen(
             Column(
                 Modifier
                     .align(Alignment.TopStart)
-                    .padding(horizontal = 40.dp, vertical = 28.dp),
+                    .windowInsetsPadding(WindowInsets.displayCutout)
+                    .padding(horizontal = if (isPhone) 16.dp else 40.dp, vertical = 28.dp),
             ) {
                 Text(
                     current.titleName.ifEmpty { playing.name },
@@ -499,6 +523,18 @@ fun PlayerScreen(
                     trackDialog = null
                 },
                 onDismiss = { trackDialog = null },
+            )
+        }
+
+        if (channelsOpen) {
+            ChannelPanel(
+                groups = channelGroups,
+                favoriteIds = lists.channels,
+                hiddenIds = lists.hidden.toSet(),
+                currentUrl = viewModel.liveUrl,
+                onPick = { failure = null; viewModel.switchChannel(it) },
+                onClose = { channelsOpen = false },
+                modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
 
@@ -567,6 +603,8 @@ private fun PlayerControls(
     onNext: () -> Unit,
     onAudio: () -> Unit,
     onSubtitles: () -> Unit,
+    // solo en la TV en vivo, cuando ya llegó la lista de canales
+    onChannels: (() -> Unit)?,
     landscape: Boolean,
     // solo en el celular: null en la tele
     onOrientation: (() -> Unit)?,
@@ -578,7 +616,8 @@ private fun PlayerControls(
         modifier
             .fillMaxWidth()
             .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
-            .padding(horizontal = 40.dp, vertical = 24.dp),
+            .windowInsetsPadding(WindowInsets.displayCutout)
+            .padding(horizontal = if (onOrientation != null) 16.dp else 40.dp, vertical = 24.dp),
     ) {
         if (live) {
             Text(
@@ -596,33 +635,45 @@ private fun PlayerControls(
             )
         }
         Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (hasPrevious) TvIconButton(onClick = onPrevious, icon = R.drawable.ic_skip_previous, description = "Episodio anterior")
-            if (!live) TvIconButton(onClick = { onSeekBy(-SEEK_STEP_MS) }, icon = R.drawable.ic_rewind, description = "Atrás 10 segundos")
-            TvIconButton(
-                onClick = onPlayPause,
-                icon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
-                description = if (isPlaying) "Pausa" else "Reproducir",
-                modifier = Modifier.focusRequester(playFocus),
-            )
-            if (!live) TvIconButton(onClick = { onSeekBy(SEEK_STEP_MS) }, icon = R.drawable.ic_forward, description = "Adelante 10 segundos")
-            if (hasNext) TvIconButton(onClick = onNext, icon = R.drawable.ic_skip_next, description = "Siguiente episodio")
-            Spacer(Modifier.weight(1f))
-            if (favorite != null) {
-                TvButton(
-                    onClick = onFavorite,
-                    icon = if (favorite) R.drawable.ic_favorite else R.drawable.ic_favorite_border,
-                    text = if (favorite) "En favoritos" else "Favorito",
+        // Si no cabe todo en una línea (celular en vertical), los botones de la derecha bajan a otra.
+        FlowRow(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (hasPrevious) TvIconButton(onClick = onPrevious, icon = R.drawable.ic_skip_previous, description = "Episodio anterior")
+                if (!live) TvIconButton(onClick = { onSeekBy(-SEEK_STEP_MS) }, icon = R.drawable.ic_rewind, description = "Atrás 10 segundos")
+                TvIconButton(
+                    onClick = onPlayPause,
+                    icon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
+                    description = if (isPlaying) "Pausa" else "Reproducir",
+                    modifier = Modifier.focusRequester(playFocus),
+                )
+                if (!live) TvIconButton(onClick = { onSeekBy(SEEK_STEP_MS) }, icon = R.drawable.ic_forward, description = "Adelante 10 segundos")
+                if (hasNext) TvIconButton(onClick = onNext, icon = R.drawable.ic_skip_next, description = "Siguiente episodio")
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onChannels != null) {
+                    if (onOrientation != null) TvIconButton(onClick = onChannels, icon = R.drawable.ic_tv, description = "Canales")
+                    else TvButton(onClick = onChannels, icon = R.drawable.ic_tv, text = "Canales")
+                }
+                if (favorite != null) {
+                    val icon = if (favorite) R.drawable.ic_favorite else R.drawable.ic_favorite_border
+                    val label = if (favorite) "En favoritos" else "Favorito"
+                    // en el celular solo el corazón: el texto no deja sitio a los demás botones
+                    if (onOrientation != null) TvIconButton(onClick = onFavorite, icon = icon, description = label)
+                    else TvButton(onClick = onFavorite, icon = icon, text = label)
+                }
+                if (hasAudioChoice) TvButton(onClick = onAudio) { Text("Audio") }
+                if (hasSubtitles) TvButton(onClick = onSubtitles) { Text("Subtítulos") }
+                if (onPip != null) TvIconButton(onClick = onPip, icon = R.drawable.ic_pip, description = "Ventana flotante")
+                if (onOrientation != null) TvIconButton(
+                    onClick = onOrientation,
+                    icon = if (landscape) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen,
+                    description = if (landscape) "Contraer" else "Expandir",
                 )
             }
-            if (hasAudioChoice) TvButton(onClick = onAudio) { Text("Audio") }
-            if (hasSubtitles) TvButton(onClick = onSubtitles) { Text("Subtítulos") }
-            if (onPip != null) TvIconButton(onClick = onPip, icon = R.drawable.ic_pip, description = "Ventana flotante")
-            if (onOrientation != null) TvIconButton(
-                onClick = onOrientation,
-                icon = if (landscape) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen,
-                description = if (landscape) "Contraer" else "Expandir",
-            )
         }
     }
 }
@@ -671,6 +722,70 @@ private fun SeekBar(positionMs: Long, durationMs: Long, onSeekBy: (Long) -> Unit
                     .size(if (focused) 20.dp else 12.dp)
                     .background(Color.White, RoundedCornerShape(50)),
             )
+        }
+    }
+}
+
+/**
+ * Mosaico de canales sobre el video, que sigue sonando detrás: favoritos primero y luego
+ * cada categoría en su fila. Al abrirlo el foco cae en el canal que se está viendo.
+ */
+@Composable
+private fun ChannelPanel(
+    groups: List<ChannelGroup>,
+    favoriteIds: List<String>,
+    hiddenIds: Set<String>,
+    currentUrl: String?,
+    onPick: (Channel) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val rows = remember(groups, favoriteIds, hiddenIds) {
+        val visible = groups.map { g -> g.copy(channels = g.channels.filter { it.id !in hiddenIds }) }.filter { it.channels.isNotEmpty() }
+        val byId = groups.flatMap { it.channels }.associateBy { it.id }
+        val favorites = favoriteIds.mapNotNull { byId[it] }
+        listOfNotNull(favorites.takeIf { it.isNotEmpty() }?.let { ChannelGroup("♥ Mis favoritos", it) }) + visible
+    }
+    // la primera fila donde aparece el canal actual; si no está, la primera tarjeta
+    val startRow = rows.indexOfFirst { g -> g.channels.any { it.url == currentUrl } }.coerceAtLeast(0)
+    val startColumn = rows.getOrNull(startRow)?.channels?.indexOfFirst { it.url == currentUrl }?.coerceAtLeast(0) ?: 0
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val wide = LocalConfiguration.current.screenWidthDp >= 900
+    Column(
+        modifier
+            .fillMaxWidth()
+            .fillMaxHeight(if (wide) 0.6f else 0.75f)
+            .background(Color.Black.copy(alpha = 0.88f))
+            .windowInsetsPadding(WindowInsets.displayCutout)
+            .padding(horizontal = if (wide) 40.dp else 16.dp, vertical = 16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text("Canales", style = MaterialTheme.typography.titleLarge, color = Color.White, modifier = Modifier.weight(1f))
+            TvIconButton(onClick = onClose, icon = R.drawable.ic_close, description = "Cerrar")
+        }
+        Spacer(Modifier.height(8.dp))
+        LazyColumn(
+            state = rememberLazyListState(initialFirstVisibleItemIndex = startRow),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            itemsIndexed(rows, key = { _, g -> g.name }) { r, group ->
+                Column {
+                    Text(group.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                    Spacer(Modifier.height(8.dp))
+                    LazyRow(
+                        state = rememberLazyListState(initialFirstVisibleItemIndex = if (r == startRow) startColumn else 0),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        itemsIndexed(group.channels, key = { _, c -> c.id }) { c, channel ->
+                            ChannelCard(
+                                channel,
+                                modifier = if (r == startRow && c == startColumn) Modifier.focusRequester(focus) else Modifier,
+                            ) { onPick(channel) }
+                        }
+                    }
+                }
+            }
         }
     }
 }

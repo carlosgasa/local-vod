@@ -671,11 +671,14 @@ def scan():
     organize_series()
     items = []
     durations = load_durations()
+    info = load_info()
     for d in library_entries(MOVIES, SERIES):
         if not d.is_dir() and not playable(d):
             continue
         item = scan_title(d, durations)
         if item:
+            # edad, géneros y descripción escritos a mano en data/info.json (clave: id del título)
+            item.update(info.get(item["id"], {}))
             items.append(item)
     return items
 
@@ -906,6 +909,7 @@ def start_conversion(source):
 DURATIONS_FILE = STATE_FILE.parent / "durations.json"
 LINKS_FILE = STATE_FILE.parent / "links.json"
 IPTV_FILE = STATE_FILE.parent / "iptv.json"
+INFO_FILE = STATE_FILE.parent / "info.json"
 _durations_lock = threading.Lock()
 _scanning_durations = False
 _scanning_thumbs = False
@@ -964,6 +968,13 @@ def video_files():
     if not MEDIA_ROOT.is_dir():
         return []
     return [p for p in MEDIA_ROOT.rglob("*") if p.is_file() and p.suffix.lower() in VIDEO_EXT]
+
+
+def load_info():
+    try:
+        return json.loads(INFO_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
 
 
 def load_durations():

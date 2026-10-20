@@ -550,6 +550,7 @@ private fun TitleCard(
                     Modifier.fillMaxSize().alpha(posterAlpha),
                     fallbackUrl = title.mosaicUrl ?: title.thumbUrl,
                 )
+                if (title.age != null) AgeBadge(title.age, Modifier.align(Alignment.TopStart).padding(6.dp))
                 if (progress != null) ProgressBar(progress, Modifier.align(Alignment.BottomCenter))
             }
         }
@@ -559,6 +560,16 @@ private fun TitleCard(
                 title.name,
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (title.genres.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                title.genres.take(2).joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
@@ -655,6 +666,20 @@ private fun ContinueCard(item: ContinueItem, onClick: () -> Unit) {
     }
 }
 
+/** Edad mínima en una esquina de la carátula, como en las apps de streaming. */
+@Composable
+fun AgeBadge(age: String, modifier: Modifier = Modifier) {
+    Text(
+        age,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = Color.White,
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 5.dp, vertical = 1.dp),
+    )
+}
+
 @Composable
 private fun ProgressBar(fraction: Float, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(4.dp).background(Color.White.copy(alpha = 0.25f))) {
@@ -748,6 +773,16 @@ private fun Hero(
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.75f),
             )
+            title.description?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.85f),
+                    maxLines = if (wide) 3 else 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Spacer(Modifier.height(if (wide) 16.dp else 10.dp))
             val resume = continueItems.any { it.title.id == title.id }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -786,12 +821,16 @@ private fun Hero(
     }
 }
 
-/** "Película · 1 h 52 min" o "Serie · 2 temporadas · 16 episodios". */
-fun titleMeta(title: Title): String = if (title.isMovie) {
-    listOfNotNull("Película", title.episodes.firstOrNull()?.durationSeconds?.let { formatDuration(it) })
-        .joinToString(" · ")
-} else {
-    val seasons = title.seasons.size
-    val episodes = title.episodes.size
-    "Serie · $seasons temporada${if (seasons > 1) "s" else ""} · $episodes episodio${if (episodes > 1) "s" else ""}"
+/** "Película · 1 h 52 min · 12+ · Acción, Drama" o "Serie · 2 temporadas · 16 episodios · 18+". */
+fun titleMeta(title: Title): String {
+    val kind = if (title.isMovie) {
+        listOfNotNull("Película", title.episodes.firstOrNull()?.durationSeconds?.let { formatDuration(it) })
+            .joinToString(" · ")
+    } else {
+        val seasons = title.seasons.size
+        val episodes = title.episodes.size
+        "Serie · $seasons temporada${if (seasons > 1) "s" else ""} · $episodes episodio${if (episodes > 1) "s" else ""}"
+    }
+    val genres = title.genres.take(3).joinToString(", ").ifEmpty { null }
+    return listOfNotNull(kind, title.age, genres).joinToString(" · ")
 }

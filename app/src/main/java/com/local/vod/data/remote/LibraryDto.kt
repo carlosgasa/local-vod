@@ -21,6 +21,9 @@ data class TitleDto(
     val mosaic: String? = null,
     val seasons: List<SeasonDto> = emptyList(),
     val addedAt: Long = 0,
+    val age: String? = null,
+    val genres: List<String> = emptyList(),
+    val description: String? = null,
 )
 
 @Serializable
@@ -81,6 +84,9 @@ fun TitleDto.toDomain(baseUrl: String) = Title(
         )
     },
     addedAt = addedAt,
+    age = age,
+    genres = genres,
+    description = description,
 )
 
 fun EpisodeDto.toDomain(titleId: String, baseUrl: String) = Episode(

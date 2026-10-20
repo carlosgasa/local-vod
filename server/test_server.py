@@ -97,7 +97,10 @@ def build_tree(root):
 
 def test_scan(root):
     server.MEDIA_ROOT = root
+    server.INFO_FILE = root / "info.json"
+    server.INFO_FILE.write_text(json.dumps({"Dune (2021)": {"age": "12+", "genres": ["Ciencia ficción"]}}))
     items = {i["title"]: i for i in server.scan()}
+    assert items["Dune (2021)"]["age"] == "12+" and "age" not in items["Breaking Bad"]
     assert list(items) == ["Breaking Bad", "Cortos", "Dune (2021)"], list(items)
     assert "Viaje 2" not in items
 

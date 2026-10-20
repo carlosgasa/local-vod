@@ -60,18 +60,32 @@ fun LiveTvScreen(
     var selected by remember { mutableStateOf<Channel?>(null) }
     val onCard: (Channel) -> Unit = { if (state.editing) selected = it else onChannel(it) }
     Column(Modifier.fillMaxSize().appBackground().screenPadding()) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        val title = @Composable { modifier: Modifier ->
             Text(
                 "TV en vivo",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                modifier = modifier,
             )
+        }
+        val buttons = @Composable {
             TvButton(onClick = viewModel::toggleEditing, primary = state.editing) { Text(if (state.editing) "Listo" else "Editar") }
             Spacer(Modifier.width(8.dp))
             TvButton(onClick = viewModel::load, icon = R.drawable.ic_refresh, text = "Recargar")
             Spacer(Modifier.width(8.dp))
             TvButton(onClick = onBack) { Text("Volver") }
+        }
+        // Como en la pantalla principal: en el celular en vertical los botones van debajo del título.
+        if (LocalConfiguration.current.screenWidthDp >= 600) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                title(Modifier.weight(1f))
+                buttons()
+            }
+        } else {
+            title(Modifier)
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { buttons() }
         }
         if (state.editing) Text(
             "Elige un canal para marcarlo como favorito u ocultarlo. Los ocultos se ven en gris.",
@@ -165,10 +179,10 @@ private fun ChannelOptionsDialog(
 }
 
 @Composable
-fun ChannelCard(channel: Channel, dimmed: Boolean = false, onClick: () -> Unit) {
+fun ChannelCard(channel: Channel, dimmed: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val width = if (LocalConfiguration.current.screenWidthDp >= 900) 200.dp else 150.dp
     Column(Modifier.width(width).alpha(if (dimmed) 0.35f else 1f)) {
-        TvCard(onClick = onClick, modifier = Modifier.width(width)) {
+        TvCard(onClick = onClick, modifier = modifier.width(width)) {
             Box(
                 Modifier
                     .fillMaxWidth()

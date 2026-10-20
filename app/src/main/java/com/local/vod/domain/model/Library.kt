@@ -11,6 +11,10 @@ data class Title(
     val seasons: List<Season>,
     /** Cuándo apareció en la carpeta: para la fila de "añadido recientemente". */
     val addedAt: Long = 0L,
+    /** Edad mínima ("12+"), géneros y sinopsis: los pone a mano el servidor, pueden faltar. */
+    val age: String? = null,
+    val genres: List<String> = emptyList(),
+    val description: String? = null,
 ) {
     val episodes: List<Episode> get() = seasons.flatMap { it.episodes }
 

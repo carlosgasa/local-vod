@@ -91,6 +91,11 @@ fun DetailScreen(
             title == null -> Text("Cargando…")
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
                 item(key = "cabecera") { Backdrop(title, compact) }
+                title.description?.let {
+                    item(key = "sinopsis") {
+                        Text(it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.widthIn(max = 760.dp))
+                    }
+                }
                 item(key = "acciones") {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Spacer(Modifier.height(4.dp))
