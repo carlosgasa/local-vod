@@ -151,9 +151,9 @@ def save_progress(profile_id, episode_id, title_id, position_ms, duration_ms):
     return with_state(mutate)
 
 
-# "Ver después" y "Favoritos" (ids de títulos) y los canales favoritos (su dirección),
-# por perfil, el último añadido primero.
-LISTS = ("later", "favorites", "channels")
+# "Ver después" y "Favoritos" (ids de títulos) y los canales favoritos y ocultos (su
+# dirección), por perfil, el último añadido primero.
+LISTS = ("later", "favorites", "channels", "hidden")
 
 
 def lists_of(profile_id):

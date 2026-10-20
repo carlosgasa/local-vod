@@ -63,6 +63,7 @@ data class ListsResponse(
     val later: List<String> = emptyList(),
     val favorites: List<String> = emptyList(),
     val channels: List<String> = emptyList(),
+    val hidden: List<String> = emptyList(),
 )
 
 @Serializable
@@ -220,12 +221,12 @@ class VodApi @Inject constructor(
 
     suspend fun lists(baseUrl: String, profileId: String): TitleLists =
         get(baseUrl, "/api/lists?profile=$profileId") { body ->
-            json.decodeFromString<ListsResponse>(body).let { TitleLists(it.later, it.favorites, it.channels) }
+            json.decodeFromString<ListsResponse>(body).let { TitleLists(it.later, it.favorites, it.channels, it.hidden) }
         }
 
     suspend fun setInList(baseUrl: String, profileId: String, list: String, titleId: String, on: Boolean): TitleLists =
         post(baseUrl, "/api/lists", json.encodeToString(SetInListBody(profileId, list, titleId, on))) { body ->
-            json.decodeFromString<ListsResponse>(body).let { TitleLists(it.later, it.favorites, it.channels) }
+            json.decodeFromString<ListsResponse>(body).let { TitleLists(it.later, it.favorites, it.channels, it.hidden) }
         }
 
     suspend fun status(baseUrl: String): ServerStatus = get(baseUrl, "/api/status") { body ->
