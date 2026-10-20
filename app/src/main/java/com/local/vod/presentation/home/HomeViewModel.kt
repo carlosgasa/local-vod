@@ -135,7 +135,7 @@ class HomeViewModel @Inject constructor(
             runCatching { syncProgress() }
             runCatching { lists.refresh() }
             runCatching { getLibrary(refresh) }
-                .onSuccess { titles -> _state.update { it.copy(loading = false, titles = titles) } }
+                .onSuccess { titles -> _state.update { it.copy(loading = false, titles = titles, serverDown = false) } }
                 .onFailure { e ->
                     _state.update { it.copy(loading = false, error = e.message ?: "No se pudo conectar") }
                 }
