@@ -31,7 +31,9 @@
         <activity
             android:name=".presentation.MainActivity"
             android:theme="@style/Theme.LocalVod.Starting"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
             android:exported="true"
             android:launchMode="singleTop">
             <intent-filter>

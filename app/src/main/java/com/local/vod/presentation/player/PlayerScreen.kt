@@ -25,6 +25,16 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import android.app.Activity
+import android.app.PictureInPictureParams
+import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.os.Build
+import android.util.Rational
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.core.app.PictureInPictureModeChangedInfo
+import androidx.core.util.Consumer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -198,6 +208,41 @@ fun PlayerScreen(
         onDispose { bars?.show(WindowInsetsCompat.Type.systemBars()) }
     }
 
+    // En el celular: girar a lo ancho o a lo alto con un botón, y la ventanita flotante (PiP)
+    // solo cuando se pide; al minimizar la app el video se pausa como siempre.
+    val activity = view.context as? ComponentActivity
+    val isPhone = remember { !context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) }
+    val canPip = remember {
+        isPhone && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+    }
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    var inPip by remember { mutableStateOf(false) }
+    DisposableEffect(activity) {
+        val listener = Consumer<PictureInPictureModeChangedInfo> { inPip = it.isInPictureInPictureMode }
+        activity?.addOnPictureInPictureModeChangedListener(listener)
+        onDispose {
+            activity?.removeOnPictureInPictureModeChangedListener(listener)
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+    LaunchedEffect(inPip) { if (inPip) controlsVisible = false }
+
+    fun toggleOrientation() {
+        activity?.requestedOrientation =
+            if (landscape) ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+        interaction++
+    }
+
+    fun enterPip() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || activity == null) return
+        val size = player.videoSize
+        val ratio = if (size.width > 0 && size.height > 0) Rational(size.width, size.height) else Rational(16, 9)
+        // Android rechaza proporciones más extremas que 2.39:1; entonces, la ventana por defecto.
+        runCatching { activity.enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(ratio).build()) }
+            .recoverCatching { activity.enterPictureInPictureMode(PictureInPictureParams.Builder().build()) }
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -243,7 +288,10 @@ fun PlayerScreen(
         player.addListener(listener)
 
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_PAUSE) {
+            // En la ventanita flotante la app queda en pausa pero el video sigue; se detiene
+            // cuando se cierra la ventanita (ON_STOP).
+            val pip = activity?.isInPictureInPictureMode == true
+            if ((event == Lifecycle.Event.ON_PAUSE && !pip) || event == Lifecycle.Event.ON_STOP) {
                 player.pause()
                 player.currentMediaItem?.mediaId?.let { viewModel.save(it, player.currentPosition, player.duration) }
             }
@@ -314,6 +362,8 @@ fun PlayerScreen(
             // en pausa sí se deja, para que no se quede encendida toda la noche.
             update = { it.keepScreenOn = isPlaying },
         )
+        // en la ventanita flotante, solo el video
+        if (inPip) return@Box
 
         // Con los controles escondidos, en el celular: doble toque a un lado salta 10 s,
         // un toque saca los controles como siempre. Con los controles fuera no se tapa nada.
@@ -378,6 +428,9 @@ fun PlayerScreen(
                 onNext = { player.seekToNextMediaItem() },
                 onAudio = { trackDialog = C.TRACK_TYPE_AUDIO },
                 onSubtitles = { trackDialog = C.TRACK_TYPE_TEXT },
+                landscape = landscape,
+                onOrientation = if (isPhone) ::toggleOrientation else null,
+                onPip = if (canPip) ::enterPip else null,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
@@ -514,6 +567,10 @@ private fun PlayerControls(
     onNext: () -> Unit,
     onAudio: () -> Unit,
     onSubtitles: () -> Unit,
+    landscape: Boolean,
+    // solo en el celular: null en la tele
+    onOrientation: (() -> Unit)?,
+    onPip: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val live = durationMs <= 0
@@ -560,6 +617,12 @@ private fun PlayerControls(
             }
             if (hasAudioChoice) TvButton(onClick = onAudio) { Text("Audio") }
             if (hasSubtitles) TvButton(onClick = onSubtitles) { Text("Subtítulos") }
+            if (onPip != null) TvIconButton(onClick = onPip, icon = R.drawable.ic_pip, description = "Ventana flotante")
+            if (onOrientation != null) TvIconButton(
+                onClick = onOrientation,
+                icon = if (landscape) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen,
+                description = if (landscape) "Contraer" else "Expandir",
+            )
         }
     }
 }
